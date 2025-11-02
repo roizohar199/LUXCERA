@@ -1,0 +1,148 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root { 
+  color-scheme: light; 
+}
+
+html, body, #root { 
+  height: 100%; 
+}
+
+body { 
+  margin: 0; 
+  background: #ffffff; 
+  color: #333; 
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', system-ui, Arial, sans-serif; 
+}
+
+input, select, textarea { 
+  font-family: inherit; 
+}
+
+a { 
+  color: inherit; 
+  text-decoration: none;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+/* אנימציות מותאמות אישית לאורות הצפים */
+@keyframes float {
+  0%, 100% {
+    transform: translateY(0px) scale(1);
+  }
+  50% {
+    transform: translateY(-20px) scale(1.05);
+  }
+}
+
+@keyframes glow {
+  0%, 100% {
+    opacity: 0.4;
+  }
+  50% {
+    opacity: 0.7;
+  }
+}
+
+/* אנימציית באנר נעה */
+@keyframes scroll {
+  0% {
+    transform: translateX(0);
+  }
+  100% {
+    transform: translateX(-50%);
+  }
+}
+
+.animate-scroll {
+  animation: scroll 20s linear infinite;
+}
+
+/* נגישות */
+body.highlight-links a {
+  background-color: #ffeb3b !important;
+  padding: 2px 4px;
+  border-radius: 2px;
+}
+
+body.highlight-headings h1,
+body.highlight-headings h2,
+body.highlight-headings h3,
+body.highlight-headings h4,
+body.highlight-headings h5,
+body.highlight-headings h6 {
+  background-color: #ffeb3b !important;
+  padding: 2px 4px;
+  border-radius: 2px;
+}
+
+/* תיאור קבוע לקטלוג תמונות */
+body.fixed-descriptions img {
+  border: 2px solid #3b82f6 !important;
+}
+
+/* הצגת תיאור תמונות */
+body.show-descriptions img::after {
+  content: attr(alt);
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: rgba(0, 0, 0, 0.8);
+  color: white;
+  padding: 8px;
+  font-size: 12px;
+}
+
+/* ביטול הבהובים */
+body.disable-blinks *,
+body.disable-blinks *::before,
+body.disable-blinks *::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
+  scroll-behavior: auto !important;
+}
+
+/* ניווט מקלדת */
+body.keyboard-navigation *:focus-visible {
+  outline: 3px solid #3b82f6 !important;
+  outline-offset: 2px !important;
+  border-radius: 4px !important;
+}
+
+body.keyboard-navigation button:focus-visible,
+body.keyboard-navigation a:focus-visible,
+body.keyboard-navigation input:focus-visible,
+body.keyboard-navigation select:focus-visible,
+body.keyboard-navigation textarea:focus-visible {
+  outline: 3px solid #3b82f6 !important;
+  outline-offset: 2px !important;
+  box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.3) !important;
+}
+
+/* סמן שחור */
+body.black-cursor *,
+body.black-cursor button,
+body.black-cursor a,
+body.black-cursor input,
+body.black-cursor select,
+body.black-cursor textarea {
+  cursor: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path fill="%23000" stroke="%23fff" stroke-width="1" d="M12 2L2 22h5l1.5-4h9l1.5 4h5L12 2z"/></svg>') 0 0, auto !important;
+}
+
+/* סמן גדול */
+body.large-cursor *,
+body.large-cursor button,
+body.large-cursor a,
+body.large-cursor input,
+body.large-cursor select,
+body.large-cursor textarea {
+  cursor: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24"><path fill="%23000" stroke="%23fff" stroke-width="2" d="M12 2L2 22h5l1.5-4h9l1.5 4h5L12 2z"/></svg>') 0 0, auto !important;
+}
+
