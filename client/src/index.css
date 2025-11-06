@@ -12,7 +12,7 @@ html, body, #root {
 
 body { 
   margin: 0; 
-  background: #ffffff; 
+  background: #F9F6EE; 
   color: #333; 
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', system-ui, Arial, sans-serif; 
 }
@@ -144,5 +144,58 @@ body.large-cursor input,
 body.large-cursor select,
 body.large-cursor textarea {
   cursor: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24"><path fill="%23000" stroke="%23fff" stroke-width="2" d="M12 2L2 22h5l1.5-4h9l1.5 4h5L12 2z"/></svg>') 0 0, auto !important;
+}
+
+/* עיצוב scrollbar לעגלת קניות */
+.overflow-y-scroll::-webkit-scrollbar {
+  width: 8px;
+}
+
+.overflow-y-scroll::-webkit-scrollbar-track {
+  background: #f1f5f9;
+  border-radius: 4px;
+}
+
+.overflow-y-scroll::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 4px;
+}
+
+.overflow-y-scroll::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+/* Sale Badge - Ribbon Style יוקרתי */
+.sale-ribbon {
+  position: absolute;
+  top: 10px;
+  left: -35px;
+  background: linear-gradient(45deg, #FFD700, #B8860B);
+  color: #000;
+  font-weight: 700;
+  padding: 5px 40px;
+  transform: rotate(-45deg);
+  font-size: 0.8rem;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3), 0 0 10px rgba(255, 215, 0, 0.3);
+  z-index: 10;
+  letter-spacing: 0.05em;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+/* Sale Badge - Corner Style אלגנטי */
+.sale-badge-corner {
+  position: absolute;
+  top: 0;
+  right: 0;
+  background: linear-gradient(135deg, #FFD700 0%, #B8860B 100%);
+  color: #000;
+  font-weight: 700;
+  padding: 6px 12px;
+  font-size: 0.75rem;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25), 0 0 12px rgba(255, 215, 0, 0.2);
+  z-index: 10;
+  letter-spacing: 0.05em;
+  border-bottom-left-radius: 8px;
+  clip-path: polygon(0 0, 100% 0, 100% 100%, 0 85%);
 }
 

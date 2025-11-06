@@ -1,23 +1,73 @@
 import React from 'react';
 import { motion } from 'framer-motion';
 import { useGoogleLogin } from '@react-oauth/google';
-import { Search, User, ShoppingBag, Phone, Mail, Instagram, Facebook, Menu, X, Trash2, Plus, Minus, Package, Settings, Heart, ChevronLeft, ChevronRight, Maximize2, Minimize2, Type, Eye, Link as LinkIcon, Hash, Palette, Contrast, Filter, Keyboard, Volume2, RotateCcw, AlertTriangle, Flag, Shield, Info, HelpCircle, Wand2, Image as ImageIcon, Hand, Headphones, ArrowRight } from 'lucide-react';
+import {
+  Search, User, ShoppingBag, Phone, Mail, Instagram, Facebook, Menu, X, Trash2, Plus, Minus, Package,
+  Settings, Heart, ChevronLeft, ChevronRight, Maximize2, Minimize2, Type, Eye, Link as LinkIcon, Hash,
+  Palette, Contrast, Filter, Keyboard, Volume2, RotateCcw, AlertTriangle, Flag, Shield, Info, HelpCircle,
+  Wand2, Image as ImageIcon, Hand, Headphones, ArrowRight, CreditCard, MapPin, CheckCircle
+} from 'lucide-react';
+import BitPaymentButton from './components/BitPaymentButton';
+import GiftCardApply from './components/GiftCardApply';
+import PromoGiftApply from './components/PromoGiftApply';
+import GiftCardView from './components/GiftCardView';
+import GiftCardEntryButton from './components/GiftCardEntryButton';
+import Footer from './components/Footer';
+import CategoryShowcase from './components/CategoryShowcase';
+import luxceraLogo from './assets/Luxcera Logo.png';
+
+// Base API URL from environment variables (עם פולבק בטוח לדומיין הנוכחי)
+// משתמשים ב-path יחסי /api/... דרך proxy של Vite כדי למנוע בעיות כפילות
+const getApiUrl = (path) => {
+  // מסיר / מההתחלה של path אם קיים (כי אנחנו מוסיפים אותו)
+  const cleanPath = path.startsWith('/') ? path : `/${path}`;
+  
+  const envUrl = (import.meta?.env?.VITE_API_URL || '').trim();
+  if (!envUrl) {
+    // אם אין VITE_API_URL, נשתמש ב-proxy של Vite (localhost:5173)
+    // זה יעבוד דרך ה-proxy שמוגדר ב-vite.config.ts - פשוט path יחסי
+    return cleanPath;
+  }
+  
+  // אם יש VITE_API_URL, נשתמש בו ישירות
+  let baseUrl = envUrl.replace(/\/+$/, ''); // מסיר סלאשים בסוף
+  // מסיר /api בסוף אם קיים (כדי למנוע /api/api)
+  if (baseUrl.endsWith('/api')) {
+    baseUrl = baseUrl.slice(0, -4);
+  }
+  const finalUrl = `${baseUrl}${cleanPath}`;
+  // דיבוג - להסיר בפרודקשן
+  if (typeof window !== 'undefined' && import.meta?.env?.DEV) {
+    console.log('[getApiUrl]', { path, envUrl, baseUrl, finalUrl });
+  }
+  return finalUrl;
+};
+
+// פונקציה לקבלת CSRF token
+async function getCsrfToken() {
+  try {
+    const res = await fetch(getApiUrl('/api/csrf'), {
+      credentials: 'include', // חובה כדי לקבל/לשלוח עוגיות
+    });
+    const data = await res.json();
+    // אפשר לקחת מ-res.json().csrfToken או לקרוא מהעוגייה XSRF-TOKEN
+    return data.csrfToken || '';
+  } catch (err) {
+    console.error('Failed to get CSRF token:', err);
+    return '';
+  }
+}
 
 function PromoBanner() {
   const items = Array(6).fill(null);
-  
-  // יצירת עותק כפול לאנימציה רציפה חלקה
   const duplicatedItems = [...items, ...items];
-  
   return (
-    <div className="relative overflow-hidden bg-[#D4C5B3] border-t border-b border-[#C4B5A3] py-3">
+    <div className="relative overflow-hidden bg-[#40E0D0] border-t border-b border-[#30D5C8] py-3" aria-label="הטבת משלוח">
       <div className="flex animate-scroll whitespace-nowrap">
         {duplicatedItems.map((_, i) => (
           <div key={i} className="inline-flex items-center gap-3 mx-8">
-            <span className="text-[#A6896D] font-medium text-lg">
-              משלוח חינם מעל ₪300
-            </span>
-            <Heart className="w-5 h-5 text-[#A6896D]" fill="currentColor" />
+            <span className="text-white font-medium text-lg">משלוח חינם מעל ₪300</span>
+            <Heart className="w-5 h-5 text-white" fill="currentColor" aria-hidden="true" />
           </div>
         ))}
       </div>
@@ -25,57 +75,52 @@ function PromoBanner() {
   );
 }
 
-function Nav({ onCartClick, onUserClick, cartCount }) {
+function Nav({ onCartClick, onUserClick, onSearchClick, cartCount, isLoggedIn, userName }) {
   const [mobileMenuOpen, setMobileMenuOpen] = React.useState(false);
-  const links = [{ name: 'בית', href: '#בית' }, { name: 'קטלוג', href: '#גלריה' }, { name: 'יצירת קשר', href: '#הזמנה' }];
-  
+  const links = [{ name: 'בית', href: '#בית' }, { name: 'קטלוג', href: '#קטלוג' }, { name: 'יצירת קשר', href: '#הזמנה' }];
+
   return (
-    <nav className="sticky top-0 w-full z-50 bg-black shadow-md">
+    <nav className="sticky top-0 w-full z-50 bg-black shadow-md" aria-label="ניווט ראשי">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center">
-        {/* לוגו */}
-        <div className="text-xl font-semibold text-white">
-          LUXCERA
-        </div>
-        
-        {/* ניווט דסקטופ */}
-        <div className="hidden md:flex gap-6 text-white/80 text-sm">
+        <a href="#בית" className="flex items-center">
+          <img src={luxceraLogo} alt="LUXCERA" className="h-16 sm:h-20 md:h-24 w-auto rounded-xl" />
+        </a>
+
+        <div className="hidden md:flex gap-8 text-gold text-base">
           {links.map(link => (
-            <a key={link.name} href={link.href} className="hover:text-white transition">
-              {link.name}
-            </a>
+            <a key={link.name} href={link.href} className="hover:text-gold/80 transition font-medium">{link.name}</a>
           ))}
         </div>
-        
-        {/* אייקונים */}
-        <div className="flex items-center gap-4">
-          <Search className="w-5 h-5 text-white cursor-pointer hover:opacity-70 transition" />
-          <button onClick={onUserClick} className="text-white hover:opacity-70 transition">
-            <User className="w-5 h-5" />
+
+        <div className="flex items-center gap-5">
+          <button onClick={onSearchClick} className="text-gold hover:text-gold/80 transition" aria-label="חיפוש">
+            <Search className="w-6 h-6" />
           </button>
-          <button 
-            onClick={onCartClick}
-            className="relative text-white hover:opacity-70 transition"
-          >
-            <ShoppingBag className="w-5 h-5" />
+          <button onClick={onUserClick} className="flex items-center gap-2 text-gold hover:text-gold/80 transition" aria-label="אזור אישי">
+            {isLoggedIn && userName && (
+              <span className="hidden sm:inline text-base font-medium text-gold">{userName}</span>
+            )}
+            <User className="w-6 h-6" />
+          </button>
+          <button onClick={onCartClick} className="relative text-gold hover:text-gold/80 transition" aria-label="עגלת קניות">
+            <ShoppingBag className="w-6 h-6" />
             {cartCount > 0 && (
-              <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center">
+              <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center" aria-live="polite">
                 {cartCount}
               </span>
             )}
           </button>
-          {/* תפריט מובייל */}
-          <button className="md:hidden text-white" onClick={() => setMobileMenuOpen(!mobileMenuOpen)}>
-            {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+          <button className="md:hidden text-gold hover:text-gold/80" onClick={() => setMobileMenuOpen(!mobileMenuOpen)} aria-label="תפריט">
+            {mobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
           </button>
         </div>
       </div>
-      
-      {/* תפריט מובייל */}
+
       {mobileMenuOpen && (
-        <div className="md:hidden bg-black border-t border-white/10">
+        <div className="md:hidden bg-black border-t border-gold/30">
           <div className="px-4 py-3 space-y-2">
             {links.map(link => (
-              <a key={link.name} href={link.href} className="block text-white hover:bg-white/10 p-2" onClick={() => setMobileMenuOpen(false)}>
+              <a key={link.name} href={link.href} className="block text-gold hover:bg-gold/10 p-2" onClick={() => setMobileMenuOpen(false)}>
                 {link.name}
               </a>
             ))}
@@ -88,63 +133,43 @@ function Nav({ onCartClick, onUserClick, cartCount }) {
 
 function Section({ id, className = '', children }) {
   return (
-    <section id={id} className={`max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 ${className}`}>
-      {children}
-    </section>
+    <section id={id} className={`max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 ${className}`}>{children}</section>
   );
 }
 
 function Hero() {
   return (
     <Section id="בית" className="pt-20">
-      {/* רקע Hero */}
-      <div className="relative h-[600px] rounded-none overflow-hidden bg-gradient-to-b from-[#f5e6d3] to-[#e8d5c4]">
-        {/* תמונת רקע - נרות בוקה צפים */}
-        <div className="absolute inset-0 bg-cover bg-center opacity-60" style={{
-          backgroundImage: 'url(https://images.unsplash.com/photo-1608075702949-9077fcc29419?w=2000&auto=format&fit=crop&q=80)',
-          filter: 'blur(2px) brightness(0.9)'
-        }}>
-        </div>
-        
-        {/* אפקט אורות צפים עם CSS */}
-        <div className="absolute inset-0 overflow-hidden">
+      <div className="relative h-[600px] rounded-2xl overflow-hidden bg-black">
+        <div
+          className="absolute inset-0 bg-cover bg-center opacity-60"
+          style={{
+            backgroundImage: 'url(https://images.unsplash.com/photo-1608075702949-9077fcc29419?w=2000&auto=format&fit=crop&q=80)',
+            filter: 'blur(2px) brightness(0.9)'
+          }}
+          role="img"
+          aria-label="נרות מעוצבים ברקע"
+        />
+        <div className="absolute inset-0 overflow-hidden" aria-hidden="true">
           <div className="absolute w-32 h-32 bg-yellow-200/40 rounded-full blur-3xl top-20 left-10 animate-pulse"></div>
           <div className="absolute w-40 h-40 bg-orange-200/30 rounded-full blur-3xl top-40 right-20 animate-pulse delay-150"></div>
           <div className="absolute w-28 h-28 bg-yellow-100/50 rounded-full blur-3xl bottom-32 left-1/3 animate-pulse delay-300"></div>
           <div className="absolute w-36 h-36 bg-amber-200/30 rounded-full blur-3xl bottom-20 right-1/4 animate-pulse delay-500"></div>
           <div className="absolute w-24 h-24 bg-yellow-300/40 rounded-full blur-3xl top-1/3 left-1/2 animate-pulse delay-700"></div>
         </div>
-        
-        {/* שכבת Gradient לתוכן קריא */}
-        <div className="absolute inset-0 bg-gradient-to-b from-black/40 via-black/20 to-black/40"></div>
-        
-        {/* תוכן על פני התמונה */}
+        <div className="absolute inset-0 bg-gradient-to-b from-black/40 via-black/20 to-black/40" />
         <div className="relative h-full flex items-center justify-center px-8 lg:px-16 z-10">
-          <motion.div
-            initial={{ opacity: 0, y: 30 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.8 }}
-            className="max-w-3xl text-center"
-          >
-            <h1 className="text-6xl sm:text-7xl md:text-8xl font-bold text-gray-900 mb-6 leading-tight tracking-tight" style={{
-              fontFamily: 'serif'
-            }}>
+          <motion.div initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.8 }} className="max-w-3xl text-center">
+            <h1 className="text-6xl sm:text-7xl md:text-8xl font-bold text-gold mb-6 leading-tight tracking-tight" style={{ fontFamily: 'serif' }}>
               LUXCERA
             </h1>
-            <p className="text-2xl sm:text-3xl text-gray-800 font-light tracking-wide mb-8" style={{
-              fontFamily: 'serif'
-            }}>
+            <p className="text-2xl sm:text-3xl text-gold font-light tracking-wide mb-8" style={{ fontFamily: 'serif' }}>
               The Art of Light
             </p>
-            <p className="text-lg text-gray-700 mb-10 max-w-2xl mx-auto leading-relaxed">
+            <p className="text-lg text-gold mb-10 max-w-2xl mx-auto leading-relaxed">
               נרות שעווה יוקרתיים בעבודת יד, עם ריחות מרגיעים וצבעים מותאמים אישית
             </p>
-            <motion.a
-              href="#הזמנה"
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              className="inline-block bg-[#4A6741] hover:bg-[#5a7a51] text-white px-10 py-4 rounded-lg font-semibold transition-colors shadow-xl text-lg"
-            >
+            <motion.a href="#הזמנה" whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} className="inline-block bg-gold hover:bg-gold/90 text-black-lux px-10 py-4 rounded-xl font-semibold transition-colors shadow-gold text-lg border-2 border-gold">
               הזמן עכשיו
             </motion.a>
           </motion.div>
@@ -154,105 +179,217 @@ function Hero() {
   );
 }
 
-function ProductsCarousel({ onAddToCart, title, products, carouselKey }) {
+function ProductsCarousel({ onAddToCart, title, products }) {
   const [currentIndex, setCurrentIndex] = React.useState(0);
+  const maxIndex = Math.max(0, products.length - 4);
 
-  const nextSlide = () => {
-    const maxIndex = Math.max(0, products.length - 4);
-    setCurrentIndex((prev) => (prev + 1) % (maxIndex + 1));
-  };
-
-  const prevSlide = () => {
-    const maxIndex = Math.max(0, products.length - 4);
-    setCurrentIndex((prev) => (prev - 1 + (maxIndex + 1)) % (maxIndex + 1));
-  };
+  const nextSlide = () => setCurrentIndex((prev) => (prev >= maxIndex ? 0 : prev + 1));
+  const prevSlide = () => setCurrentIndex((prev) => (prev <= 0 ? maxIndex : prev - 1));
 
   const visibleProducts = products.slice(currentIndex, currentIndex + 4);
   const hasNavigation = products.length > 4;
 
-  return (
-    <Section className="py-16">
-      <div className="mb-12">
-        <div className="flex justify-between items-start mb-4">
-          <h2 className="text-5xl font-bold text-gray-900" style={{ fontFamily: 'serif' }}>
-            {title}
-          </h2>
-        </div>
-        {title === 'מארזים' && (
-          <p className="text-gray-600 text-sm max-w-2xl">
-            חשוב לנו לציין שחלק מהמוצרים שלנו נעשים בעבודת יד ולכן ייתכנו שינויים קלים בצורות ובגוונים.
-          </p>
-        )}
-      </div>
-      
-      {/* קרוסלת מוצרים */}
-      <div className="relative">
-        {/* כפתורי ניווט */}
-        {hasNavigation && (
-          <>
-            <button
-              onClick={prevSlide}
-              className="absolute right-full top-1/2 -translate-y-1/2 mr-4 w-12 h-12 rounded-full bg-gray-300 hover:bg-gray-400 flex items-center justify-center transition-colors z-10"
-            >
-              <ChevronRight className="w-6 h-6 text-white" />
-            </button>
-            <button
-              onClick={nextSlide}
-              className="absolute left-full top-1/2 -translate-y-1/2 ml-4 w-12 h-12 rounded-full bg-gray-300 hover:bg-gray-400 flex items-center justify-center transition-colors z-10"
-            >
-              <ChevronLeft className="w-6 h-6 text-white" />
-            </button>
-          </>
-        )}
+  const backgroundImage = title === 'מארזים' ? 'bg-packages-bg' : title === 'פניני שעווה' ? 'bg-waxpearls-bg' : null;
+  
+  return backgroundImage ? (
+    <Section className="py-0">
+      <div className={`relative min-h-screen ${backgroundImage} bg-cover bg-center bg-no-repeat rounded-2xl overflow-hidden`}>
+        <div className="absolute inset-0 bg-candle/40 z-0 pointer-events-none" />
+        <div className="relative h-full flex flex-col px-4 sm:px-6 lg:px-8 py-16 z-10">
+          <div className="mb-12 relative z-10">
+            <div className="flex justify-between items-start mb-4">
+              <h2 className="text-5xl font-bold text-gray-900" style={{ fontFamily: 'serif' }}>{title}</h2>
+            </div>
+          </div>
 
-        {/* מוצרים */}
-        <div className="flex gap-6 overflow-hidden">
-          {visibleProducts.map(product => (
-            <motion.div
-              key={product.id}
-              whileHover={{ y: -8 }}
-              className="flex-shrink-0 w-64 bg-white border border-gray-200 rounded-lg overflow-hidden cursor-pointer group"
-            >
-              {/* תמונה */}
-              <div className={`aspect-square ${product.color} flex items-center justify-center p-8 relative overflow-hidden`}>
-                <div className="text-8xl transform group-hover:scale-110 transition-transform">
-                  {product.image}
-                </div>
-                {/* קו זהב תחתון */}
-                <div className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-yellow-400 to-yellow-500"></div>
-              </div>
-              
-              {/* פרטי מוצר */}
-              <div className="p-6">
-                <h3 className="font-semibold text-gray-900 mb-3 text-lg" style={{ fontFamily: 'serif' }}>
-                  {product.name}
-                </h3>
-                <p className="text-gray-700 text-xl font-semibold mb-4">₪ {product.price.toFixed(2)}</p>
-                
-                {/* כפתור */}
+          <div className="relative z-10">
+            {hasNavigation && (
+              <>
                 <button
-                  onClick={() => product.inStock && onAddToCart(product)}
-                  className={`w-full py-3 rounded-lg font-semibold transition-colors ${
-                    product.inStock 
-                      ? 'bg-black text-white hover:bg-gray-800' 
-                      : 'bg-gray-400 text-white cursor-not-allowed'
-                  }`}
-                  disabled={!product.inStock}
+                  type="button"
+                  onClick={prevSlide}
+                  className="absolute right-full top-1/2 -translate-y-1/2 mr-4 w-12 h-12 rounded-full bg-gray-300 hover:bg-gray-400 flex items-center justify-center transition-colors z-10"
+                  aria-label="למוצרים הקודמים"
                 >
-                  {product.inStock ? 'הוספה לסל' : 'אזל מהמלאי'}
+                  <ChevronRight className="w-6 h-6 text-white" />
                 </button>
-              </div>
-            </motion.div>
-          ))}
+                <button
+                  type="button"
+                  onClick={nextSlide}
+                  className="absolute left-full top-1/2 -translate-y-1/2 ml-4 w-12 h-12 rounded-full bg-gray-300 hover:bg-gray-400 flex items-center justify-center transition-colors z-10"
+                  aria-label="למוצרים הבאים"
+                >
+                  <ChevronLeft className="w-6 h-6 text-white" />
+                </button>
+              </>
+            )}
+
+            <div className="flex gap-6 overflow-hidden">
+              {visibleProducts.map(product => {
+                const hasSalePrice = product.salePrice && product.salePrice > 0;
+                return (
+                  <motion.div key={product.id} whileHover={{ y: -8 }} className="flex-shrink-0 w-64 bg-white border-2 border-gold/20 rounded-lg overflow-hidden cursor-pointer group relative shadow-luxury hover:shadow-gold transition-all">
+                    <div 
+                      className="absolute inset-0 bg-packages-bg bg-cover bg-center bg-no-repeat opacity-20 rounded-lg"
+                      style={{
+                        zIndex: 0
+                      }}
+                      role="img"
+                      aria-label="מארז נרות ברקע המוצר"
+                    />
+                    <div className="aspect-square bg-white flex items-center justify-center p-8 relative overflow-hidden z-10">
+                      {product.imageUrl ? (
+                        <img src={product.imageUrl} alt={product.name} className="w-full h-full object-cover transform group-hover:scale-110 transition-transform" />
+                      ) : (
+                        <div className="text-8xl transform group-hover:scale-110 transition-transform">{product.image}</div>
+                      )}
+                      {hasSalePrice && (
+                        <div className="sale-ribbon">
+                          מחיר מבצע
+                        </div>
+                      )}
+                      <div className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-gold/60 via-gold to-gold/60"></div>
+                    </div>
+
+                    <div className="p-6 relative z-10 bg-ivory/95 backdrop-blur-sm border-t border-gold/10">
+                      <h3 className="font-semibold text-gray-900 mb-3 text-lg" style={{ fontFamily: 'serif' }}>{product.name}</h3>
+                      <div className="mb-4">
+                        {hasSalePrice ? (
+                          <div className="flex flex-col gap-1">
+                            <div className="flex items-center gap-2">
+                              <span className="text-gold font-semibold">מבצע:</span>
+                              <span className="text-gold text-2xl font-bold">₪ {Number(product.salePrice).toFixed(2)}</span>
+                            </div>
+                            <span className="text-gray-400 text-sm line-through">₪ {Number(product.originalPrice).toFixed(2)}</span>
+                          </div>
+                        ) : (
+                          <p className="text-gray-700 text-xl font-semibold">₪ {Number(product.price).toFixed(2)}</p>
+                        )}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => product.inStock && onAddToCart(product)}
+                        className={`w-full py-3 rounded-lg font-semibold transition-colors ${product.inStock ? 'bg-black text-white hover:bg-gray-800' : 'bg-gray-400 text-white cursor-not-allowed'}`}
+                        disabled={!product.inStock}
+                      >
+                        {product.inStock ? 'הוספה לסל' : 'אזל מהמלאי'}
+                      </button>
+                    </div>
+                  </motion.div>
+                );
+              })}
+            </div>
+          </div>
         </div>
       </div>
     </Section>
+  ) : (
+    <Section className="py-16">
+        <div className={`mb-12 ${title === 'מארזים' ? 'relative z-10' : ''}`}>
+          <div className="flex justify-between items-start mb-4">
+            <h2 className="text-5xl font-bold text-gray-900" style={{ fontFamily: 'serif' }}>{title}</h2>
+          </div>
+          {title === 'מארזים' && (
+            <p className="text-gray-600 text-sm max-w-2xl">חשוב לנו לציין שחלק מהמוצרים שלנו נעשים בעבודת יד ולכן ייתכנו שינויים קלים בצורות ובגוונים.</p>
+          )}
+        </div>
+
+        <div className={`relative ${title === 'מארזים' ? 'z-10' : ''}`}>
+          {hasNavigation && (
+            <>
+              <button
+                type="button"
+                onClick={prevSlide}
+                className="absolute right-full top-1/2 -translate-y-1/2 mr-4 w-12 h-12 rounded-full bg-gray-300 hover:bg-gray-400 flex items-center justify-center transition-colors z-10"
+                aria-label="למוצרים הקודמים"
+              >
+                <ChevronRight className="w-6 h-6 text-white" />
+              </button>
+              <button
+                type="button"
+                onClick={nextSlide}
+                className="absolute left-full top-1/2 -translate-y-1/2 ml-4 w-12 h-12 rounded-full bg-gray-300 hover:bg-gray-400 flex items-center justify-center transition-colors z-10"
+                aria-label="למוצרים הבאים"
+              >
+                <ChevronLeft className="w-6 h-6 text-white" />
+              </button>
+            </>
+          )}
+
+          <div className="flex gap-6 overflow-hidden">
+            {visibleProducts.map(product => {
+              const hasSalePrice = product.salePrice && product.salePrice > 0;
+              return (
+                <motion.div key={product.id} whileHover={{ y: -8 }} className={`flex-shrink-0 w-64 bg-white border border-gray-200 rounded-lg overflow-hidden cursor-pointer group ${title === 'מארזים' ? 'relative' : ''}`}>
+                  {title === 'מארזים' && (
+                    <div 
+                      className="absolute inset-0 bg-cover bg-center bg-no-repeat opacity-25 rounded-lg"
+                      style={{
+                        backgroundImage: 'url(https://images.unsplash.com/photo-1576072457077-0fa7b4d2cbf4?w=800&auto=format&fit=crop&q=80)',
+                        zIndex: 0
+                      }}
+                      role="img"
+                      aria-label="מארז נרות ברקע המוצר"
+                    />
+                  )}
+                  <div className={`aspect-square ${product.color} flex items-center justify-center p-8 relative overflow-hidden ${title === 'מארזים' ? 'z-10' : ''}`}>
+                    {product.imageUrl ? (
+                      <img src={product.imageUrl} alt={product.name} className="w-full h-full object-cover transform group-hover:scale-110 transition-transform" />
+                    ) : (
+                      <div className="text-8xl transform group-hover:scale-110 transition-transform">{product.image}</div>
+                    )}
+                    {hasSalePrice && (
+                      <div className="sale-ribbon">
+                        מחיר מבצע
+                      </div>
+                    )}
+                    <div className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-gold/60 via-gold to-gold/60"></div>
+                  </div>
+
+                  <div className={`p-6 ${title === 'מארזים' ? 'relative z-10 bg-white/80 backdrop-blur-sm' : ''}`}>
+                    <h3 className="font-semibold text-gray-900 mb-3 text-lg" style={{ fontFamily: 'serif' }}>{product.name}</h3>
+                    <div className="mb-4">
+                      {hasSalePrice ? (
+                        <div className="flex flex-col gap-1">
+                          <div className="flex items-center gap-2">
+                            <span className="text-gold font-semibold">מבצע:</span>
+                            <span className="text-gold text-2xl font-bold">₪ {Number(product.salePrice).toFixed(2)}</span>
+                          </div>
+                          <span className="text-gray-400 text-sm line-through">₪ {Number(product.originalPrice).toFixed(2)}</span>
+                        </div>
+                      ) : (
+                        <p className="text-gray-700 text-xl font-semibold">₪ {Number(product.price).toFixed(2)}</p>
+                      )}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => product.inStock && onAddToCart(product)}
+                      className={`w-full py-3 rounded-lg font-semibold transition-colors ${product.inStock ? 'bg-black text-white hover:bg-gray-800' : 'bg-gray-400 text-white cursor-not-allowed'}`}
+                      disabled={!product.inStock}
+                    >
+                      {product.inStock ? 'הוספה לסל' : 'אזל מהמלאי'}
+                    </button>
+                  </div>
+                </motion.div>
+              );
+            })}
+          </div>
+        </div>
+      </Section>
   );
 }
 
 function Gallery() {
   return (
-    <Section id="גלריה" className="py-20 bg-gray-50">
+    <Section id="גלריה" className="py-20 bg-ivory">
+      {/* גלריה תמונות */}
+    </Section>
+  );
+}
+
+function About() {
+  return (
+    <Section id="אודות" className="py-20 bg-ivory">
       <div className="text-center mb-12">
         <h2 className="text-4xl font-bold text-gray-900 mb-4">אודות LUXCERA</h2>
         <p className="text-gray-600 max-w-3xl mx-auto leading-relaxed">
@@ -260,15 +397,14 @@ function Gallery() {
           כל נר נבנה בקפידה ומתוך אהבה למלאכה.
         </p>
       </div>
-      
-      <div className="grid md:grid-cols-3 gap-6">
+
+      <div className="grid md:grid-cols-2 gap-6 max-w-2xl mx-auto">
         {[
           { icon: '💎', title: 'איכות גבוהה', desc: 'שעווה איכותית וארומה מתמשכת' },
-          { icon: '🎨', title: 'מותאם אישית', desc: 'צבעים וריחות לפי הזמנה' },
           { icon: '✨', title: 'בעבודת יד', desc: 'יצירה קפדנית ואומנותית' },
         ].map(({ icon, title, desc }) => (
-          <div key={title} className="bg-white border border-gray-200 rounded-lg p-6 text-center hover:shadow-lg transition-shadow">
-            <div className="text-4xl mb-4">{icon}</div>
+          <div key={title} className="bg-white border-2 border-gold/20 rounded-lg p-6 text-center hover:shadow-gold transition-all shadow-luxury" role="article" aria-label={title}>
+            <div className="text-4xl mb-4" aria-hidden="true">{icon}</div>
             <h3 className="font-semibold text-gray-900 mb-2 text-lg">{title}</h3>
             <p className="text-gray-600 text-sm">{desc}</p>
           </div>
@@ -291,122 +427,187 @@ function OrderForm() {
   });
   const [status, setStatus] = React.useState({ sending: false, ok: null, error: "" });
 
+  const validate = () => {
+    if (!model.fullName || model.fullName.trim().length < 2) return 'שם מלא חובה (מינ׳ 2 תווים)';
+    if (model.fullName.trim().length > 100) return 'שם יכול להכיל עד 100 תווים';
+
+    const hasEmail = !!model.email?.trim();
+    const hasPhone = !!model.phone?.trim();
+    if (!hasEmail && !hasPhone) return 'חובה למלא אימייל או טלפון אחד לפחות';
+
+    if (hasEmail && !/^\S+@\S+\.\S+$/.test(model.email.trim())) return 'אימייל לא תקין';
+
+    if (hasPhone) {
+      const digitsOnly = model.phone.replace(/\D/g, '');
+      if (digitsOnly.length < 8) return 'טלפון חייב להכיל לפחות 8 ספרות';
+    }
+
+    if (!model.category || !['נרות', 'גבס', 'חרסינה', 'אפוקסי'].includes(model.category)) return 'יש לבחור קטגוריה';
+
+    const qtyNum = Number(model.qty);
+    if (!Number.isFinite(qtyNum) || !Number.isInteger(qtyNum) || qtyNum < 1) return 'כמות חייבת להיות מספר שלם 1 ומעלה';
+    if (qtyNum > 1000) return 'כמות מקסימלית היא 1000';
+
+    if (!model.message || model.message.trim().length < 3) return 'הודעה חובה (מינ׳ 3 תווים)';
+    if (model.message.trim().length > 2000) return 'הודעה יכולה להכיל עד 2000 תווים';
+
+    return null;
+  };
+
   const submit = async (e) => {
     e.preventDefault();
+    const validationError = validate();
+    if (validationError) {
+      setStatus({ sending: false, ok: false, error: validationError });
+      return;
+    }
+
     setStatus({ sending: true, ok: null, error: "" });
     try {
-      const r = await fetch('/api/contact', {
+      // קבל CSRF token לפני שליחת הבקשה
+      const csrfToken = await getCsrfToken();
+      
+      const res = await fetch(getApiUrl('/api/contact'), {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(model)
+        credentials: 'include', // חובה כדי לשלוח עוגיות
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRF-Token': csrfToken, // שולח את הטוקן בכותרת
+        },
+        body: JSON.stringify({
+          ...model,
+          qty: Number(model.qty) || 1,
+          email: model.email.trim() || undefined,
+          phone: model.phone.trim() || undefined,
+        }),
       });
-      const j = await r.json();
-      if (j.ok) setStatus({ sending: false, ok: true, error: "" });
-      else setStatus({ sending: false, ok: false, error: j.error || 'שגיאה' });
+
+      // ייתכן ושרת מחזיר non-JSON בשגיאה → מגן
+      let data = { ok: false, error: 'שגיאה' };
+      try {
+        data = await res.json();
+      } catch {
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      }
+
+      if (res.ok && data?.ok) {
+        setStatus({ sending: false, ok: true, error: "" });
+        setModel({ fullName: "", email: "", phone: "", category: "נרות", color: "", scent: "", qty: 1, message: "" });
+      } else {
+        setStatus({ sending: false, ok: false, error: data?.error || 'שגיאה' });
+      }
     } catch (err) {
       setStatus({ sending: false, ok: false, error: 'שגיאת רשת' });
     }
   };
 
   return (
-    <Section id="הזמנה" className="py-20 bg-white">
+    <Section id="הזמנה" className="py-20 bg-ivory">
       <div className="max-w-2xl mx-auto">
         <h2 className="text-4xl font-bold text-gray-900 mb-8 text-center">יצירת קשר</h2>
-        
-        <form onSubmit={submit} className="space-y-4">
+
+        <form onSubmit={submit} className="space-y-4" noValidate>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <input 
-                className="w-full border border-gray-300 rounded-lg px-4 py-3 text-gray-900 placeholder-gray-500 focus:outline-none focus:border-[#4A6741] transition-colors"
-                placeholder="שם מלא *" 
+              <input
+                className="w-full border border-sage/40 rounded-lg px-4 py-3 text-gray-900 placeholder-gray-500 focus:outline-none focus:border-gold focus:ring-2 focus:ring-gold/20 transition-colors"
+                placeholder="שם מלא *"
                 required
-                value={model.fullName} 
-                onChange={e => setModel({ ...model, fullName: e.target.value })} 
+                value={model.fullName}
+                onChange={e => setModel({ ...model, fullName: e.target.value })}
+                aria-label="שם מלא"
               />
             </div>
             <div>
-              <input 
-                className="w-full border border-gray-300 rounded-lg px-4 py-3 text-gray-900 placeholder-gray-500 focus:outline-none focus:border-[#4A6741] transition-colors"
+              <input
+                className="w-full border border-sage/40 rounded-lg px-4 py-3 text-gray-900 placeholder-gray-500 focus:outline-none focus:border-gold focus:ring-2 focus:ring-gold/20 transition-colors"
                 type="email"
                 placeholder="אימייל"
-                value={model.email} 
-                onChange={e => setModel({ ...model, email: e.target.value })} 
+                value={model.email}
+                onChange={e => setModel({ ...model, email: e.target.value })}
+                aria-label="אימייל"
               />
             </div>
           </div>
 
-          <input 
-            className="w-full border border-gray-300 rounded-lg px-4 py-3 text-gray-900 placeholder-gray-500 focus:outline-none focus:border-[#4A6741] transition-colors"
+          <input
+            className="w-full border border-gray-300 rounded-lg px-4 py-3 text-gray-900 placeholder-gray-500 focus:outline-none focus:border-gold focus:ring-2 focus:ring-gold/20 transition-colors"
             type="tel"
             placeholder="טלפון"
-            value={model.phone} 
-            onChange={e => setModel({ ...model, phone: e.target.value })} 
+            value={model.phone}
+            onChange={e => setModel({ ...model, phone: e.target.value })}
+            aria-label="טלפון"
           />
 
           <div className="grid grid-cols-2 gap-4">
-            <select 
-              className="border border-gray-300 rounded-lg px-4 py-3 text-gray-900 focus:outline-none focus:border-[#4A6741] transition-colors"
-              value={model.category} 
+            <select
+              className="border border-gray-300 rounded-lg px-4 py-3 text-gray-900 focus:outline-none focus:border-gold focus:ring-2 focus:ring-gold/20 transition-colors"
+              value={model.category}
               onChange={e => setModel({ ...model, category: e.target.value })}
+              aria-label="קטגוריה"
             >
               <option>נרות</option>
               <option>גבס</option>
               <option>חרסינה</option>
               <option>אפוקסי</option>
             </select>
-            <input 
-              className="border border-gray-300 rounded-lg px-4 py-3 text-gray-900 placeholder-gray-500 focus:outline-none focus:border-[#4A6741] transition-colors"
-              placeholder="צבע" 
-              value={model.color} 
-              onChange={e => setModel({ ...model, color: e.target.value })} 
+            <input
+              className="border border-gray-300 rounded-lg px-4 py-3 text-gray-900 placeholder-gray-500 focus:outline-none focus:border-gold focus:ring-2 focus:ring-gold/20 transition-colors"
+              placeholder="צבע"
+              value={model.color}
+              onChange={e => setModel({ ...model, color: e.target.value })}
+              aria-label="צבע"
             />
           </div>
 
           <div className="grid grid-cols-2 gap-4">
-            <input 
-              className="border border-gray-300 rounded-lg px-4 py-3 text-gray-900 placeholder-gray-500 focus:outline-none focus:border-[#4A6741] transition-colors"
-              placeholder="ריח" 
-              value={model.scent} 
-              onChange={e => setModel({ ...model, scent: e.target.value })} 
+            <input
+              className="border border-gray-300 rounded-lg px-4 py-3 text-gray-900 placeholder-gray-500 focus:outline-none focus:border-gold focus:ring-2 focus:ring-gold/20 transition-colors"
+              placeholder="ריח"
+              value={model.scent}
+              onChange={e => setModel({ ...model, scent: e.target.value })}
+              aria-label="ריח"
             />
-            <input 
-              type="number" 
-              min={1} 
-              className="border border-gray-300 rounded-lg px-4 py-3 text-gray-900 placeholder-gray-500 focus:outline-none focus:border-[#4A6741] transition-colors"
-              placeholder="כמות" 
-              value={model.qty} 
-              onChange={e => setModel({ ...model, qty: Number(e.target.value || 1) })} 
+            <input
+              type="number"
+              min={1}
+              className="border border-gray-300 rounded-lg px-4 py-3 text-gray-900 placeholder-gray-500 focus:outline-none focus:border-gold focus:ring-2 focus:ring-gold/20 transition-colors"
+              placeholder="כמות"
+              value={model.qty}
+              onChange={e => setModel({ ...model, qty: Number(e.target.value || 1) })}
+              aria-label="כמות"
             />
           </div>
 
-          <textarea 
-            rows={4} 
-            className="w-full border border-gray-300 rounded-lg px-4 py-3 text-gray-900 placeholder-gray-500 focus:outline-none focus:border-[#4A6741] transition-colors resize-none"
-            placeholder="הודעה *" 
+          <textarea
+            rows={4}
+            className="w-full border border-gray-300 rounded-lg px-4 py-3 text-gray-900 placeholder-gray-500 focus:outline-none focus:border-gold focus:ring-2 focus:ring-gold/20 transition-colors resize-none"
+            placeholder="הודעה *"
             required
-            value={model.message} 
-            onChange={e => setModel({ ...model, message: e.target.value })} 
+            value={model.message}
+            onChange={e => setModel({ ...model, message: e.target.value })}
+            aria-label="הודעה"
           />
 
-          <button 
+          <button
+            type="submit"
             disabled={status.sending}
-            className="w-full bg-[#4A6741] hover:bg-[#5a7a51] text-white px-6 py-4 rounded-lg font-semibold transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+            className="w-full bg-black hover:bg-black-lux text-gold px-6 py-4 rounded-lg font-semibold transition-colors disabled:opacity-60 disabled:cursor-not-allowed border border-gold/20"
           >
             {status.sending ? 'שולח…' : 'שלח הודעה'}
           </button>
 
-          {status.ok && <div className="text-green-600 text-sm text-center">ההודעה נשלחה. נחזור אליך בהקדם 🙏</div>}
-          {status.ok === false && <div className="text-red-600 text-sm text-center">שגיאה בשליחה: {status.error}</div>}
+          {status.ok && <div className="text-green-600 text-sm text-center" role="status">ההודעה נשלחה. נחזור אליך בהקדם 🙏</div>}
+          {status.ok === false && <div className="text-red-600 text-sm text-center" role="alert">שגיאה בשליחה: {status.error}</div>}
         </form>
-        
-        {/* וואטסאפ */}
+
         <div className="mt-8 text-center">
           <p className="text-gray-600 mb-4 text-sm">או פנו ישירות בוואטסאפ:</p>
           <a
             href={`https://wa.me/972546998603?text=${encodeURIComponent("היי LUXCERA, אשמח להזמנה/התאמה אישית 🙏")}`}
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex items-center gap-2 bg-[#4A6741] hover:bg-[#5a7a51] text-white px-6 py-3 rounded-lg font-semibold transition-colors"
+            className="inline-flex items-center gap-2 bg-black hover:bg-black-lux text-gold px-6 py-3 rounded-lg font-semibold transition-colors border border-gold/20"
           >
             <Phone className="w-5 h-5" />
             וואטסאפ LUXCERA
@@ -417,133 +618,183 @@ function OrderForm() {
   );
 }
 
-function AccountModal({ isOpen, onClose, isLoggedIn, setIsLoggedIn }) {
+function AccountModal({ isOpen, onClose, isLoggedIn, setIsLoggedIn, showCartMessage = false, onLoginSuccess }) {
   const [mode, setMode] = React.useState('login'); // 'login' or 'register'
-  const [formData, setFormData] = React.useState({
-    fullName: '',
-    email: '',
-    password: '',
-    confirmPassword: '',
-    phone: ''
-  });
+  const [formData, setFormData] = React.useState({ fullName: '', email: '', password: '', confirmPassword: '', phone: '' });
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState('');
   const [showSuccessMessage, setShowSuccessMessage] = React.useState(false);
   const [successType, setSuccessType] = React.useState(''); // 'login' or 'register'
 
-  // Google Login - must be called before any conditional returns
   const googleLogin = useGoogleLogin({
     onSuccess: async (tokenResponse) => {
       try {
-        // Get user info from Google
         const userInfo = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
           headers: { Authorization: `Bearer ${tokenResponse.access_token}` }
         }).then(res => res.json());
-        
+
         setLoading(true);
-        
-        // שלח מיילים להרשמה
+        setError('');
+
         try {
-          const response = await fetch('/api/register', {
+          // קבל CSRF token לפני שליחת הבקשה
+          const csrfToken = await getCsrfToken();
+          
+          // אם זה מצב התחברות - בודקים אם המשתמש רשום
+          if (mode === 'login') {
+            const loginResponse = await fetch(getApiUrl('/api/login-google'), {
+              method: 'POST',
+              credentials: 'include',
+              headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-Token': csrfToken,
+              },
+              body: JSON.stringify({ fullName: userInfo.name || 'משתמש', email: userInfo.email || '' })
+            });
+            
+            const loginData = await loginResponse.json();
+            
+            if (!loginResponse.ok) {
+              // המשתמש לא רשום - לא מאפשרים התחברות
+              setLoading(false);
+              setError(loginData.error || 'החשבון לא רשום במערכת. אנא הירשם קודם באמצעות Google.');
+              return;
+            }
+
+            // המשתמש קיים - מאפשרים התחברות
+            // נשתמש בשם מהמשתמש ב-DB אם קיים, אחרת מהמשתמש ב-Google
+            const fullName = loginData.user?.full_name || userInfo.name || 'משתמש';
+            setFormData({ fullName, email: userInfo.email || '', password: '', confirmPassword: '', phone: '' });
+            setLoading(false);
+            setIsLoggedIn(true);
+            onLoginSuccess?.(fullName); // עדכון שם המשתמש ב-parent component
+            setSuccessType('login');
+            setShowSuccessMessage(true);
+            setTimeout(() => { onClose(); setShowSuccessMessage(false); }, 2500);
+            return;
+          }
+          
+          // אם זה מצב הרשמה - רושמים משתמש חדש
+          const response = await fetch(getApiUrl('/api/register'), {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              fullName: userInfo.name || 'משתמש',
-              email: userInfo.email || ''
-            })
+            credentials: 'include', // חובה כדי לשלוח עוגיות
+            headers: {
+              'Content-Type': 'application/json',
+              'X-CSRF-Token': csrfToken, // שולח את הטוקן בכותרת
+            },
+            body: JSON.stringify({ fullName: userInfo.name || 'משתמש', email: userInfo.email || '' })
           });
           
+          const data = await response.json();
+          
           if (!response.ok) {
-            console.error('Failed to send registration email');
+            // אם יש שגיאה מהשרת (למשל אימייל כבר קיים)
+            setLoading(false);
+            setError(data.error || 'שגיאה בהרשמה. אנא נסה שוב.');
+            // אם האימייל כבר קיים - מעבר למצב התחברות
+            if (data.error && data.error.includes('כבר רשומה')) {
+              setTimeout(() => {
+                setMode('login');
+                setError('האימייל כבר רשום. אנא התחבר.');
+              }, 2000);
+            }
+            return;
           }
+
+          const fullName = userInfo.name || 'משתמש';
+          setFormData({ fullName, email: userInfo.email || '', password: '', confirmPassword: '', phone: '' });
+          setLoading(false);
+          setIsLoggedIn(true);
+          onLoginSuccess?.(fullName); // עדכון שם המשתמש ב-parent component
+          setSuccessType('register');
+          setShowSuccessMessage(true);
+          setTimeout(() => { onClose(); setShowSuccessMessage(false); }, 2500);
         } catch (emailErr) {
           console.error('Email error:', emailErr);
-          // ממשיכים גם אם המייל נכשל
+          setLoading(false);
+          setError('שגיאה בהרשמה. אנא נסה שוב.');
         }
-
-        setFormData({
-          fullName: userInfo.name || 'משתמש',
-          email: userInfo.email || '',
-          password: '',
-          confirmPassword: '',
-          phone: ''
-        });
-        setLoading(false);
-        setIsLoggedIn(true);
-        setSuccessType('register');
-        setShowSuccessMessage(true);
-        setTimeout(() => {
-          onClose();
-          setShowSuccessMessage(false);
-        }, 2500);
       } catch (err) {
         console.error('Google login error:', err);
+        setLoading(false);
         setError('שגיאה בהתחברות עם Google');
       }
     },
     onError: () => {
       setError('שגיאה בהתחברות עם Google');
+      setLoading(false);
     }
   });
 
-  // Handlers - must be before any returns
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
     setError('');
-    
-    // Validation
+
     if (mode === 'register') {
       if (!formData.fullName || !formData.email || !formData.password) {
-        setError('אנא מלא את כל השדות הנדרשים');
-        setLoading(false);
-        return;
+        setError('אנא מלא את כל השדות הנדרשים'); setLoading(false); return;
       }
       if (formData.password !== formData.confirmPassword) {
-        setError('הסיסמאות אינן תואמות');
-        setLoading(false);
-        return;
+        setError('הסיסמאות אינן תואמות'); setLoading(false); return;
       }
       if (formData.password.length < 6) {
-        setError('הסיסמה חייבת להכיל לפחות 6 תווים');
-        setLoading(false);
-        return;
+        setError('הסיסמה חייבת להכיל לפחות 6 תווים'); setLoading(false); return;
       }
     } else {
+      // mode === 'login' - התחברות רגילה
+      // הערה: כרגע אין endpoint להתחברות רגילה, רק Google login
+      // אבל נשאיר את הקוד הזה למקרה שיוסיף בעתיד
       if (!formData.email || !formData.password) {
-        setError('אנא מלא את כל השדות הנדרשים');
-        setLoading(false);
-        return;
+        setError('אנא מלא את כל השדות הנדרשים'); setLoading(false); return;
       }
+      // TODO: הוסף endpoint להתחברות רגילה אם צריך
+      setError('התחברות רגילה טרם זמינה. אנא השתמש ב-Google Login.'); 
+      setLoading(false); 
+      return;
     }
 
     try {
-      // אם זו הרשמה, שלח מיילים
       if (mode === 'register') {
-        const response = await fetch('/api/register', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            fullName: formData.fullName,
-            email: formData.email
-          })
-        });
-        
-        if (!response.ok) {
-          console.error('Failed to send registration email');
-          // ממשיכים גם אם המייל נכשל
+        try {
+          // קבל CSRF token לפני שליחת הבקשה
+          const csrfToken = await getCsrfToken();
+          
+          const response = await fetch(getApiUrl('/api/register'), {
+            method: 'POST',
+            credentials: 'include', // חובה כדי לשלוח עוגיות
+            headers: {
+              'Content-Type': 'application/json',
+              'X-CSRF-Token': csrfToken, // שולח את הטוקן בכותרת
+            },
+            body: JSON.stringify({ fullName: formData.fullName, email: formData.email })
+          });
+          
+          const data = await response.json();
+          
+          if (!response.ok) {
+            // אם יש שגיאה מהשרת (למשל אימייל כבר קיים)
+            setLoading(false);
+            setError(data.error || 'שגיאה בהרשמה. אנא נסה שוב.');
+            return;
+          }
+        } catch (emailErr) {
+          console.error('Email error:', emailErr);
+          setLoading(false);
+          setError('שגיאה בהרשמה. אנא נסה שוב.');
+          return;
         }
       }
 
-      // הצלחה - הצג הודעת הצלחה
       setLoading(false);
       setIsLoggedIn(true);
+      // עדכון שם המשתמש ב-parent component
+      if (formData.fullName) {
+        onLoginSuccess?.(formData.fullName);
+      }
       setSuccessType(mode);
       setShowSuccessMessage(true);
-      setTimeout(() => {
-        onClose();
-        setShowSuccessMessage(false);
-      }, 2500);
+      setTimeout(() => { onClose(); setShowSuccessMessage(false); }, 2500);
     } catch (err) {
       console.error('Registration error:', err);
       setLoading(false);
@@ -554,15 +805,10 @@ function AccountModal({ isOpen, onClose, isLoggedIn, setIsLoggedIn }) {
   const handleSocialLogin = (provider) => {
     if (provider === 'Google') {
       const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
-      console.log('Google Client ID:', clientId); // דיבוג
-      console.log('Is empty?', !clientId); // דיבוג
-      console.log('Is default?', clientId === 'YOUR_GOOGLE_CLIENT_ID' || clientId === 'YOUR_GOOGLE_CLIENT_ID_HERE'); // דיבוג
       if (!clientId || clientId === 'YOUR_GOOGLE_CLIENT_ID' || clientId === 'YOUR_GOOGLE_CLIENT_ID_HERE') {
-        console.log('FAILED: Google Login check failed'); // דיבוג
         alert('Google Login אינו מוגדר כרגע. אנא השתמש בטופס הרגיל להרשמה או פנה למנהל המערכת.');
         return;
       }
-      console.log('SUCCESS: Calling googleLogin()'); // דיבוג
       googleLogin();
     } else {
       alert(`התחברות עם ${provider} תושק בקרוב!`);
@@ -571,28 +817,24 @@ function AccountModal({ isOpen, onClose, isLoggedIn, setIsLoggedIn }) {
 
   if (!isOpen) return null;
 
+  // הודעה אם צריך להתחבר כדי לראות עגלה
+  const showCartPrompt = showCartMessage && !isLoggedIn;
+
   if (isLoggedIn) {
-    // User is logged in - show account options
     return (
       <div className="fixed inset-0 z-50 flex items-center justify-center">
         <div className="absolute inset-0 bg-black/50" onClick={onClose}></div>
-        <motion.div
-          initial={{ opacity: 0, scale: 0.95 }}
-          animate={{ opacity: 1, scale: 1 }}
-          exit={{ opacity: 0, scale: 0.95 }}
-          className="relative bg-white rounded-lg shadow-2xl w-full max-w-md mx-4"
-        >
+        <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="relative bg-white rounded-lg shadow-2xl w-full max-w-md mx-4">
           <div className="flex justify-between items-center p-6 border-b">
             <h2 className="text-2xl font-bold text-gray-900">אזור אישי</h2>
-            <button onClick={onClose} className="text-gray-400 hover:text-gray-900">
+            <button onClick={onClose} className="text-gray-400 hover:text-gray-900" aria-label="סגור">
               <X className="w-6 h-6" />
             </button>
           </div>
 
           <div className="p-6 space-y-4">
-            {/* User Info */}
             <div className="flex items-center gap-4 pb-4 border-b">
-              <div className="w-16 h-16 bg-[#4A6741] rounded-full flex items-center justify-center text-white text-2xl font-bold">
+              <div className="w-16 h-16 bg-[#40E0D0] rounded-full flex items-center justify-center text-white text-2xl font-bold">
                 {formData.fullName ? formData.fullName[0].toUpperCase() : 'U'}
               </div>
               <div>
@@ -601,7 +843,6 @@ function AccountModal({ isOpen, onClose, isLoggedIn, setIsLoggedIn }) {
               </div>
             </div>
 
-            {/* Orders Button */}
             <button className="w-full flex items-center justify-between border border-gray-300 rounded-lg p-4 hover:bg-gray-50 transition-colors">
               <div className="flex items-center gap-3">
                 <Package className="w-5 h-5 text-gray-700" />
@@ -610,7 +851,6 @@ function AccountModal({ isOpen, onClose, isLoggedIn, setIsLoggedIn }) {
               <ArrowRight className="w-5 h-5 text-gray-400" />
             </button>
 
-            {/* Profile Button */}
             <button className="w-full flex items-center justify-between border border-gray-300 rounded-lg p-4 hover:bg-gray-50 transition-colors">
               <div className="flex items-center gap-3">
                 <Settings className="w-5 h-5 text-gray-700" />
@@ -619,11 +859,10 @@ function AccountModal({ isOpen, onClose, isLoggedIn, setIsLoggedIn }) {
               <ArrowRight className="w-5 h-5 text-gray-400" />
             </button>
 
-            {/* Logout Button */}
-            <button 
-              onClick={() => setIsLoggedIn(false)}
-              className="w-full bg-red-600 hover:bg-red-700 text-white px-6 py-3 rounded-lg font-semibold transition-colors mt-4"
-            >
+            <button onClick={() => {
+              setIsLoggedIn(false);
+              onLoginSuccess?.(''); // איפוס שם המשתמש
+            }} className="w-full bg-red-600 hover:bg-red-700 text-white px-6 py-3 rounded-lg font-semibold transition-colors mt-4">
               התנתק
             </button>
           </div>
@@ -632,47 +871,52 @@ function AccountModal({ isOpen, onClose, isLoggedIn, setIsLoggedIn }) {
     );
   }
 
-  // User is not logged in - show sign in/up
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div className="absolute inset-0 bg-black/50" onClick={onClose}></div>
-      <motion.div
-        initial={{ opacity: 0, scale: 0.95 }}
-        animate={{ opacity: 1, scale: 1 }}
-        exit={{ opacity: 0, scale: 0.95 }}
-        className="relative bg-white rounded-lg shadow-2xl w-full max-w-md mx-4 max-h-[90vh] overflow-y-auto"
-      >
+      <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="relative bg-white rounded-lg shadow-2xl w-full max-w-md mx-4 max-h-[90vh] overflow-y-auto">
         <div className="flex justify-between items-center p-6 border-b sticky top-0 bg-white z-10">
-          <h2 className="text-2xl font-bold text-gray-900">
-            {mode === 'login' ? 'התחברות' : 'הרשמה'}
-          </h2>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-900">
+          <h2 className="text-2xl font-bold text-gray-900">{mode === 'login' ? 'התחברות' : 'הרשמה'}</h2>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-900" aria-label="סגור">
             <X className="w-6 h-6" />
           </button>
         </div>
 
+        {showCartPrompt && (
+          <div className="mx-6 mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+            <div className="flex items-start gap-3">
+              <ShoppingBag className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="text-blue-800 font-semibold text-sm mb-1">עגלת הקניות שלך מחכה לך!</p>
+                <p className="text-blue-700 text-sm">אנא התחבר או הירשם כדי לצפות בעגלת הקניות שלך ולהשלים את ההזמנה.</p>
+              </div>
+            </div>
+          </div>
+        )}
+
         <div className="p-6 space-y-4">
-          {/* Social Login Buttons */}
           <div className="space-y-3">
-            <button 
+            <button
+              type="button"
               onClick={() => handleSocialLogin('Google')}
               className="w-full flex items-center justify-center gap-3 border-2 border-gray-300 rounded-lg p-3 hover:bg-gray-50 transition-colors font-semibold text-gray-900"
             >
               <svg className="w-5 h-5" viewBox="0 0 24 24">
-                <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
-                <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
-                <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
-                <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+                <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
+                <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
+                <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93ל2.85-2.22.81-.62z" />
+                <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
               </svg>
               המשך עם Google
             </button>
 
-            <button 
+            <button
+              type="button"
               onClick={() => handleSocialLogin('Apple')}
               className="w-full flex items-center justify-center gap-3 border-2 border-gray-900 bg-gray-900 text-white rounded-lg p-3 hover:bg-gray-800 transition-colors font-semibold"
             >
               <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
-                <path d="M17.05 20.28c-.98.95-2.05.88-3.08.4-1.09-.5-2.08-.48-3.24 0-1.44.62-2.2.44-3.06-.4C2.79 15.25 3.51 7.59 9.05 7.31c1.35.07 2.29.74 3.08.8 1.18-.24 2.31-.93 3.57-.84 1.51.12 2.65.72 3.4 1.8-3.12 1.87-2.38 5.98.48 7.13-.57 1.5-1.31 2.99-2.54 4.09l.01-.01zM12.03 7.25c-.15-2.23 1.66-4.07 3.74-4.25.29 2.58-2.34 4.5-3.74 4.25z"/>
+                <path d="M17.05 20.28c-.98.95-2.05.88-3.08.4-1.09-.5-2.08-.48-3.24 0-1.44.62-2.2.44-3.06-.4C2.79 15.25 3.51 7.59 9.05 7.31c1.35.07 2.29.74 3.08.8 1.18-.24 2.31-.93 3.57-.84 1.51.12 2.65.72 3.4 1.8-3.12 1.87-2.38 5.98.48 7.13-.57 1.5-1.31 2.99-2.54 4.09ל.01-.01zM12.03 7.25c-.15-2.23 1.66-4.07 3.74-4.25.29 2.58-2.34 4.5-3.74 4.25z" />
               </svg>
               המשך עם Apple
             </button>
@@ -687,8 +931,7 @@ function AccountModal({ isOpen, onClose, isLoggedIn, setIsLoggedIn }) {
             </div>
           </div>
 
-          {/* Form */}
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form onSubmit={handleSubmit} className="space-y-4" noValidate>
             {mode === 'register' && (
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">שם מלא *</label>
@@ -696,7 +939,7 @@ function AccountModal({ isOpen, onClose, isLoggedIn, setIsLoggedIn }) {
                   type="text"
                   value={formData.fullName}
                   onChange={(e) => setFormData({ ...formData, fullName: e.target.value })}
-                  className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:outline-none focus:border-[#4A6741] transition-colors"
+                  className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:outline-none focus:border-gold focus:ring-2 focus:ring-gold/20 transition-colors"
                   placeholder="הזן שם מלא"
                 />
               </div>
@@ -708,7 +951,7 @@ function AccountModal({ isOpen, onClose, isLoggedIn, setIsLoggedIn }) {
                 type="email"
                 value={formData.email}
                 onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:outline-none focus:border-[#4A6741] transition-colors"
+                className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:outline-none focus:border-gold focus:ring-2 focus:ring-gold/20 transition-colors"
                 placeholder="הזן אימייל"
               />
             </div>
@@ -720,7 +963,7 @@ function AccountModal({ isOpen, onClose, isLoggedIn, setIsLoggedIn }) {
                   type="tel"
                   value={formData.phone}
                   onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                  className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:outline-none focus:border-[#4A6741] transition-colors"
+                  className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:outline-none focus:border-gold focus:ring-2 focus:ring-gold/20 transition-colors"
                   placeholder="הזן מספר טלפון"
                 />
               </div>
@@ -732,7 +975,7 @@ function AccountModal({ isOpen, onClose, isLoggedIn, setIsLoggedIn }) {
                 type="password"
                 value={formData.password}
                 onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:outline-none focus:border-[#4A6741] transition-colors"
+                className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:outline-none focus:border-gold focus:ring-2 focus:ring-gold/20 transition-colors"
                 placeholder="הזן סיסמה"
               />
             </div>
@@ -744,38 +987,36 @@ function AccountModal({ isOpen, onClose, isLoggedIn, setIsLoggedIn }) {
                   type="password"
                   value={formData.confirmPassword}
                   onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
-                  className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:outline-none focus:border-[#4A6741] transition-colors"
+                  className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:outline-none focus:border-gold focus:ring-2 focus:ring-gold/20 transition-colors"
                   placeholder="הזן סיסמה שוב"
                 />
               </div>
             )}
 
             {error && (
-              <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
-                {error}
-              </div>
+              <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">{error}</div>
             )}
 
             <button
               type="submit"
               disabled={loading}
-              className="w-full bg-[#4A6741] hover:bg-[#5a7a51] text-white px-6 py-4 rounded-lg font-semibold transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+              className="w-full bg-[#40E0D0] hover:bg-[#30D5C8] text-white px-6 py-4 rounded-lg font-semibold transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
             >
               {loading ? 'מעבד...' : mode === 'login' ? 'התחבר' : 'הירשם'}
             </button>
           </form>
 
-          {/* Toggle Mode */}
           <div className="text-center pt-2">
             <p className="text-gray-600">
               {mode === 'login' ? 'אין לך חשבון?' : 'יש לך כבר חשבון?'}
               <button
+                type="button"
                 onClick={() => {
                   setMode(mode === 'login' ? 'register' : 'login');
                   setError('');
                   setFormData({ fullName: '', email: '', password: '', confirmPassword: '', phone: '' });
                 }}
-                className="underline font-medium text-[#4A6741] hover:text-[#5a7a51] mr-1"
+                className="underline font-medium text-[#40E0D0] hover:text-[#30D5C8] mr-1"
               >
                 {mode === 'login' ? 'הרשם כאן' : 'התחבר כאן'}
               </button>
@@ -783,14 +1024,8 @@ function AccountModal({ isOpen, onClose, isLoggedIn, setIsLoggedIn }) {
           </div>
         </div>
 
-        {/* Success Message Overlay */}
         {showSuccessMessage && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="absolute inset-0 bg-green-50 border-2 border-green-500 rounded-lg flex flex-col items-center justify-center p-8"
-          >
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 bg-green-50 border-2 border-green-500 rounded-lg flex flex-col items-center justify-center p-8">
             <div className="w-20 h-20 bg-green-500 rounded-full flex items-center justify-center mb-4">
               <svg className="w-12 h-12 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
@@ -800,9 +1035,9 @@ function AccountModal({ isOpen, onClose, isLoggedIn, setIsLoggedIn }) {
               {successType === 'register' ? 'ברוכים הבאים ל-LUXCERA!' : 'התחברת בהצלחה!'}
             </h3>
             <p className="text-green-700 text-center text-lg">
-              {successType === 'register' 
-                ? 'שמתך הושלמה בהצלחה. תוכל כעת לבצע הזמנות ולהתאים אישית את נרות השעווה שלך.' 
-                : 'נכנסת לחשבון שלך. תוכל כעת לבצע הזמנות ולראות את ההיסטוריה שלך.'}
+              {successType === 'register'
+                ? 'ההרשמה הושלמה בהצלחה. כעת ניתן לבצע הזמנות ולהתאים אישית את נרות השעווה שלך.'
+                : 'נכנסת לחשבון שלך. כעת ניתן לבצע הזמנות ולצפות בהיסטוריית ההזמנות.'}
             </p>
           </motion.div>
         )}
@@ -811,113 +1046,766 @@ function AccountModal({ isOpen, onClose, isLoggedIn, setIsLoggedIn }) {
   );
 }
 
-function CartModal({ isOpen, onClose, cart, onUpdateQuantity, onRemoveItem }) {
+function SearchModal({ isOpen, onClose, products, onAddToCart }) {
+  const [searchQuery, setSearchQuery] = React.useState('');
+
+  const filteredProducts = React.useMemo(() => {
+    if (!searchQuery.trim()) return products;
+    const query = searchQuery.toLowerCase();
+    return products.filter(product => product.name.toLowerCase().includes(query));
+  }, [searchQuery, products]);
+
+  React.useEffect(() => {
+    if (isOpen) {
+      const timer = setTimeout(() => {
+        const input = document.querySelector('#search-input');
+        if (input) input.focus();
+      }, 100);
+      return () => clearTimeout(timer);
+    } else {
+      setSearchQuery('');
+    }
+  }, [isOpen]);
+
   if (!isOpen) return null;
 
-  const cartTotal = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
-  const isEmpty = cart.length === 0;
-
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
-      {/* Backdrop */}
+    <div className="fixed inset-0 z-50 flex items-start justify-center pt-20">
       <div className="absolute inset-0 bg-black/50" onClick={onClose}></div>
-      
-      {/* Modal */}
-      <motion.div
-        initial={{ opacity: 0, scale: 0.95 }}
-        animate={{ opacity: 1, scale: 1 }}
-        exit={{ opacity: 0, scale: 0.95 }}
-        className="relative bg-white rounded-lg shadow-2xl w-full max-w-md mx-4"
-      >
-        {/* Header */}
+      <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} className="relative bg-white rounded-lg shadow-2xl w-full max-w-3xl mx-4 max-h-[80vh] flex flex-col">
         <div className="flex justify-between items-center p-6 border-b">
-          <h2 className="text-2xl font-bold text-gray-900">עגלת קניות</h2>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-900">
+          <h2 className="text-2ל font-bold text-gray-900">חיפוש מוצרים</h2>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-900" aria-label="סגור">
             <X className="w-6 h-6" />
           </button>
         </div>
 
-        {/* Content */}
-        <div className="p-6">
-          {isEmpty ? (
-            /* Empty Cart */
+        <div className="p-6 border-b">
+          <div className="relative">
+            <Search className="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+            <input
+              id="search-input"
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="חפש מוצרים..."
+              className="w-full border border-gray-300 rounded-lg px-12 py-4 text-lg text-gray-900 placeholder-gray-500 focus:outline-none focus:border-gold focus:ring-2 focus:ring-gold/20 transition-colors"
+              dir="rtl"
+              aria-label="חיפוש"
+            />
+          </div>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-6">
+          {filteredProducts.length === 0 ? (
             <div className="text-center py-12">
-              <h3 className="text-2xl font-bold text-gray-900 mb-4">Your cart is empty</h3>
-              <p className="text-gray-600 mb-2">
-                Have an account? 
-                <a href="#" className="underline font-medium hover:text-gray-900"> Log in</a> to check out faster.
+              <p className="text-gray-600 text-lg">
+                {searchQuery.trim() ? 'לא נמצאו מוצרים התואמים לחיפוש' : 'התחל להקליד כדי לחפש מוצרים'}
               </p>
-              <button
-                onClick={onClose}
-                className="mt-6 w-full bg-[#4A6741] hover:bg-[#5a7a51] text-white px-6 py-3 rounded-lg font-semibold transition-colors"
-              >
-                Continue shopping
-              </button>
             </div>
           ) : (
-            /* Full Cart */
-            <div>
-              {/* Cart Items */}
-              <div className="space-y-4 mb-6">
-                {cart.map(item => (
-                  <div key={item.id} className="flex items-center gap-4 border-b pb-4">
-                    <div className="w-20 h-20 bg-gray-100 rounded-lg flex items-center justify-center">
-                      <div className={`w-12 h-12 rounded-full ${item.color}`}></div>
-                    </div>
-                    <div className="flex-1">
-                      <h4 className="font-semibold text-gray-900">{item.name}</h4>
-                      <p className="text-gray-600 text-sm">{item.scent}</p>
-                      <div className="flex items-center gap-4 mt-2">
-                        {/* Quantity Controls */}
-                        <div className="flex items-center gap-2 border border-gray-300 rounded-lg">
-                          <button
-                            onClick={() => onUpdateQuantity(item.id, item.quantity - 1)}
-                            className="p-1 hover:bg-gray-100"
-                          >
-                            <Minus className="w-4 h-4" />
-                          </button>
-                          <span className="px-3 py-1 text-sm">{item.quantity}</span>
-                          <button
-                            onClick={() => onUpdateQuantity(item.id, item.quantity + 1)}
-                            className="p-1 hover:bg-gray-100"
-                          >
-                            <Plus className="w-4 h-4" />
-                          </button>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {filteredProducts.map(product => {
+                const hasSalePrice = product.salePrice && product.salePrice > 0;
+                return (
+                  <motion.div
+                    key={product.id}
+                    whileHover={{ y: -4 }}
+                    className="flex items-center gap-4 border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow cursor-pointer group"
+                    onClick={() => {
+                      const gallerySection = document.getElementById('גלריה');
+                      if (gallerySection) gallerySection.scrollIntoView({ behavior: 'smooth' });
+                      onClose();
+                    }}
+                  >
+                    <div className={`w-20 h-20 rounded-lg ${product.color} flex items-center justify-center flex-shrink-0 relative overflow-hidden`}>
+                      {product.imageUrl ? (
+                        <img src={product.imageUrl} alt={product.name} className="w-full h-full object-cover" />
+                      ) : (
+                        <div className="text-4xl" aria-hidden="true">{product.image}</div>
+                      )}
+                      {hasSalePrice && (
+                        <div className="sale-badge-corner">
+                          מבצע
                         </div>
-                        <button
-                          onClick={() => onRemoveItem(item.id)}
-                          className="text-red-500 hover:text-red-700"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
+                      )}
                     </div>
-                    <div className="text-right">
-                      <p className="font-bold text-gray-900">₪{item.price * item.quantity}</p>
-                      <p className="text-sm text-gray-600">₪{item.price} ליחידה</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
 
-              {/* Total */}
-              <div className="border-t pt-4 mb-6">
-                <div className="flex justify-between items-center mb-4">
-                  <span className="text-gray-700 font-semibold">סה"כ</span>
-                  <span className="text-2xl font-bold text-gray-900">₪{cartTotal}</span>
+                                                                                     <div className="flex-1 min-w-0">
+                         <h3 className="font-semibold text-gray-900 mb-1 text-lg truncate" style={{ fontFamily: 'serif' }}>{product.name}</h3>
+                         {hasSalePrice ? (
+                           <div className="mb-2 flex flex-col gap-1">
+                             <div className="flex items-center gap-2">
+                               <span className="text-gold font-semibold text-sm">מבצע:</span>
+                               <span className="text-gold text-xl font-bold">₪ {Number(product.salePrice).toFixed(2)}</span>
+                             </div>
+                             <span className="text-gray-400 text-sm line-through">₪ {Number(product.originalPrice).toFixed(2)}</span>
+                           </div>
+                         ) : (
+                           <p className="text-gray-700 text-xl font-semibold mb-2">₪ {Number(product.price).toFixed(2)}</p>
+                         )}
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (product.inStock) {
+                            onAddToCart(product);
+                            onClose();
+                          }
+                        }}
+                        className={`text-sm px-4 py-2 rounded-lg font-semibold transition-colors ${product.inStock ? 'bg-black text-white hover:bg-gray-800' : 'bg-gray-400 text-white cursor-not-allowed'}`}
+                        disabled={!product.inStock}
+                      >
+                        {product.inStock ? 'הוספה לסל' : 'אזל מהמלאי'}
+                      </button>
+                    </div>
+                  </motion.div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        <div className="p-4 border-t bg-gray-50 text-center text-sm text-gray-600">נמצאו {filteredProducts.length} מוצרים</div>
+      </motion.div>
+    </div>
+  );
+}
+
+// רשימת ערים ישראליות
+const ISRAELI_CITIES = [
+  'תל אביב', 'ירושלים', 'חיפה', 'ראשון לציון', 'אשדוד', 'נתניה', 'באר שבע',
+  'בני ברק', 'חולון', 'רמת גן', 'אשקלון', 'רחובות', 'בת ים', 'כפר סבא',
+  'הרצליה', 'מודיעין', 'לוד', 'רמת השרון', 'רמלה', 'אילת', 'עכו',
+  'טבריה', 'צפת', 'נצרת', 'עפולה', 'נהריה', 'קריית שמונה', 'מגדל העמק',
+  'כרמיאל', 'קריית גת', 'דימונה', 'אריאל', 'בית שמש', 'נתיבות', 'קריית מלאכי',
+  'שדרות', 'סחנין', 'אום אל פחם', 'טייבה', 'רהט', 'נס ציונה', 'קריית אונו',
+  'גבעתיים', 'יהוד', 'רמת השרון', 'ראש העין', 'יבנה', 'אור יהודה', 'גבעת שמואל',
+  'קריית אתא', 'קריית ביאליק', 'קריית ים', 'קריית מוצקין', 'זכרון יעקב', 'מעלות',
+  'מצפה רמון', 'ערד', 'דימונה', 'ירוחם', 'מיתר', 'להבים', 'עומר', 'לקיה'
+].sort();
+
+function CheckoutModal({ isOpen, onClose, cart, onOrderComplete }) {
+  const [step, setStep] = React.useState(1);
+  const [shippingData, setShippingData] = React.useState({ fullName: '', email: '', phone: '', address: '', city: '', postalCode: '', notes: '' });
+  const [paymentData, setPaymentData] = React.useState({ paymentMethod: 'bit' });
+  const [isProcessing, setIsProcessing] = React.useState(false);
+  const [isComplete, setIsComplete] = React.useState(false);
+  const [orderSaved, setOrderSaved] = React.useState(false);
+  const [orderId, setOrderId] = React.useState(null);
+  const [saveError, setSaveError] = React.useState(null);
+  const [citySuggestions, setCitySuggestions] = React.useState([]);
+  const [showCitySuggestions, setShowCitySuggestions] = React.useState(false);
+  const cityInputRef = React.useRef(null);
+  const [validationErrors, setValidationErrors] = React.useState({});
+  const [giftCardAmount, setGiftCardAmount] = React.useState(0);
+  const [giftCardCode, setGiftCardCode] = React.useState(null);
+  const [promoAmount, setPromoAmount] = React.useState(0);
+
+  // שמירת הקרט המקורי - כדי שלא יאבד כשהקרט מתרוקן אחרי יצירת ההזמנה
+  const [savedCart, setSavedCart] = React.useState([]);
+
+  // שמירת הקרט כשהמודאל נפתח או כשהקרט משתנה (אבל לא ריק)
+  React.useEffect(() => {
+    // אם המודאל פתוח והקרט לא ריק, שמור אותו
+    if (isOpen && cart.length > 0) {
+      setSavedCart(cart);
+    }
+    // אם המודאל נפתח בפעם הראשונה, שמור את הקרט גם אם הוא ריק (אבל זה לא אמור לקרות)
+    else if (isOpen && savedCart.length === 0 && cart.length > 0) {
+      setSavedCart(cart);
+    }
+  }, [isOpen, cart]);
+
+  // שימוש בקרט שמור במקום הקרט הנוכחי (אם יש קרט שמור)
+  // זה מבטיח שגם אם הקרט מתרוקן אחרי יצירת ההזמנה, נשתמש בקרט המקורי
+  const cartToUse = savedCart.length > 0 ? savedCart : cart;
+
+  // חישוב הסכומים - משתמשים ב-useMemo כדי לוודא שהחישוב מתעדכן כשה-cart משתנה
+  const cartTotal = React.useMemo(() => {
+    const total = cartToUse.reduce((sum, item) => {
+      const itemPrice = Number(item.price) || 0;
+      const itemQuantity = Number(item.quantity) || 0;
+      return sum + (itemPrice * itemQuantity);
+    }, 0);
+    return total;
+  }, [cartToUse]);
+
+  const shippingFee = React.useMemo(() => {
+    const fee = cartTotal >= 300 ? 0 : 30;
+    return fee;
+  }, [cartTotal]);
+
+  const finalTotal = React.useMemo(() => {
+    const total = cartTotal + shippingFee - giftCardAmount - promoAmount;
+    return Math.max(0, total); // לא לרדת מתחת ל-0
+  }, [cartTotal, shippingFee, giftCardAmount, promoAmount]);
+
+  React.useEffect(() => {
+    if (!isOpen) {
+      setStep(1);
+      setIsComplete(false);
+      setIsProcessing(false);
+      setOrderSaved(false);
+      setOrderId(null);
+      setSaveError(null);
+      setShippingData({ fullName: '', email: '', phone: '', address: '', city: '', postalCode: '', notes: '' });
+      setPaymentData({ paymentMethod: 'bit' });
+      setCitySuggestions([]);
+      setShowCitySuggestions(false);
+      setValidationErrors({});
+      setGiftCardAmount(0);
+      setGiftCardCode(null);
+      setPromoAmount(0);
+    }
+  }, [isOpen]);
+
+  // פונקציה לסינון ערים לפי הקלדה
+  const handleCityInputChange = (e) => {
+    const value = e.target.value;
+    setShippingData({ ...shippingData, city: value });
+    
+    if (value.length > 0) {
+      // מחפש ערים שמתחילות עם הטקסט הקליד, ואם אין - מחפש גם בתוך השם
+      const startsWith = ISRAELI_CITIES.filter(city => 
+        city.startsWith(value)
+      );
+      const contains = ISRAELI_CITIES.filter(city => 
+        city.includes(value) && !city.startsWith(value)
+      );
+      const filtered = [...startsWith, ...contains].slice(0, 10); // מוגבל ל-10 תוצאות
+      setCitySuggestions(filtered);
+      setShowCitySuggestions(filtered.length > 0);
+    } else {
+      setCitySuggestions([]);
+      setShowCitySuggestions(false);
+    }
+  };
+
+  const handleCitySelect = (city) => {
+    setShippingData({ ...shippingData, city });
+    setCitySuggestions([]);
+    setShowCitySuggestions(false);
+    // ניקוי שגיאת ולידציה אם הייתה
+    if (validationErrors.city) {
+      setValidationErrors({ ...validationErrors, city: '' });
+    }
+  };
+
+  // סגירת רשימת הערים כשלוחצים מחוץ
+  React.useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (cityInputRef.current && !cityInputRef.current.contains(event.target)) {
+        setShowCitySuggestions(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  // פונקציה לבדיקת ולידציה של פרטי משלוח
+  const validateShippingData = () => {
+    const errors = {};
+    
+    if (!shippingData.fullName || shippingData.fullName.trim() === '') {
+      errors.fullName = 'שם מלא נדרש';
+    }
+    
+    if (!shippingData.phone || shippingData.phone.trim() === '') {
+      errors.phone = 'טלפון נדרש';
+    } else if (shippingData.phone.trim().length < 9) {
+      errors.phone = 'מספר טלפון לא תקין';
+    }
+    
+    if (!shippingData.address || shippingData.address.trim() === '') {
+      errors.address = 'כתובת משלוח נדרשת';
+    }
+    
+    if (!shippingData.city || shippingData.city.trim() === '') {
+      errors.city = 'עיר נדרשת';
+    }
+    
+    // מיקוד לא חובה - לא בודקים אותו
+    
+    setValidationErrors(errors);
+    return Object.keys(errors).length === 0;
+  };
+
+  const handleShippingSubmit = (e) => {
+    e.preventDefault();
+    
+    if (!validateShippingData()) {
+      // גלילה למעלה כדי שהשגיאות יראו
+      const firstError = document.querySelector('.border-red-500');
+      if (firstError) {
+        firstError.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        firstError.focus();
+      }
+      return;
+    }
+    
+    setStep(2);
+  };
+
+  const handlePaymentSubmit = (e) => {
+    e.preventDefault();
+    
+    // בודקים שוב את פרטי המשלוח לפני מעבר לסיכום
+    if (!validateShippingData()) {
+      // אם יש שגיאות, חוזרים לשלב 1
+      setStep(1);
+      const firstError = document.querySelector('.border-red-500');
+      if (firstError) {
+        firstError.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        firstError.focus();
+      }
+      return;
+    }
+    
+    setStep(3);
+  };
+
+  const handleCompleteOrder = async () => {
+    // בודקים שוב את כל הפרטים לפני שליחת ההזמנה
+    if (!validateShippingData()) {
+      setStep(1);
+      const firstError = document.querySelector('.border-red-500');
+      if (firstError) {
+        firstError.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        firstError.focus();
+      }
+      return;
+    }
+    
+    setIsProcessing(true);
+    setSaveError(null);
+    
+    try {
+      // שליחת ההזמנה לשרת
+      // מוודאים שכל הנתונים עם הטיפוסים הנכונים
+      const orderData = {
+        shippingData,
+        paymentData: {
+          paymentMethod: 'bit',
+        },
+        cart: cartToUse.map(item => ({
+          id: item.isGiftCard ? String(item.id) : Number(item.id), // Gift Cards יש להם string ID
+          name: String(item.name),
+          price: Number(item.price),
+          originalPrice: Number(item.originalPrice || item.price),
+          salePrice: item.salePrice ? Number(item.salePrice) : null,
+          quantity: Number(item.quantity),
+          inStock: item.inStock !== undefined ? Boolean(item.inStock) : true,
+          color: item.color || null,
+          image: item.image || null,
+          imageUrl: item.imageUrl || null,
+          category: item.category || null,
+          description: item.description || null,
+          isGiftCard: item.isGiftCard || false,
+          giftCardEmail: item.giftCardEmail || null,
+          giftCardAmount: item.giftCardAmount || null,
+        })),
+        total: Number(finalTotal),
+        gift_card_amount: giftCardAmount > 0 ? Number(giftCardAmount) : 0,
+        gift_card_code: giftCardCode || null,
+      };
+
+      const res = await fetch(getApiUrl('/api/orders'), {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(orderData),
+      });
+
+      const data = await res.json();
+      
+      if (data.ok) {
+        setOrderSaved(true);
+        setOrderId(data.orderId);
+        setIsComplete(true);
+        onOrderComplete?.({ shippingData, paymentData, cart: cartToUse, total: finalTotal, orderId: data.orderId });
+      } else {
+        setSaveError(data.error || 'שגיאה בשמירת ההזמנה');
+        setIsProcessing(false);
+      }
+    } catch (err) {
+      console.error('Order error:', err);
+      setSaveError('לא הצלחתי לשלוח את ההזמנה לשרת');
+      setIsProcessing(false);
+    }
+  };
+
+  if (!isOpen) return null;
+
+  if (isComplete && orderSaved) {
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center">
+        <div className="absolute inset-0 bg-black/50"></div>
+        <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className="relative bg-white rounded-lg shadow-2xl w-full max-w-md mx-4 p-8 text-center" dir="rtl">
+          <div className="w-20 h-20 bg-green-500 rounded-full flex items-center justify-center mx-auto mb-4">
+            <CheckCircle className="w-12 h-12 text-white" />
+          </div>
+          <h2 className="text-3xl font-bold text-gray-900 mb-2">ההזמנה התקבלה!</h2>
+          <p className="text-gray-600 mb-4">תודה על רכישתך. ההזמנה נשמרה בהצלחה.</p>
+          {orderId && (
+            <div className="bg-gray-50 rounded-lg p-4 mb-6">
+              <p className="text-sm text-gray-600 mb-2">מספר הזמנה</p>
+              <p className="text-2xl font-bold text-[#40E0D0]">#{orderId}</p>
+            </div>
+          )}
+          
+          <div className="mb-6">
+            <p className="text-gray-700 mb-4 font-semibold">עכשיו תוכל לשלם בביט:</p>
+            <div className="flex justify-center">
+              <BitPaymentButton
+                amount={finalTotal}
+                bitPhone="0546998603"
+                whatsappPhone="972546998603"
+                buttonLabel="תשלום בביט"
+                allowEdit={false}
+              />
+            </div>
+          </div>
+          
+          <button onClick={onClose} className="w-full bg-[#40E0D0] hover:bg-[#30D5C8] text-white px-6 py-3 rounded-lg font-semibold transition-colors">סגור</button>
+        </motion.div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto py-8">
+      <div className="absolute inset-0 bg-black/50" onClick={step === 1 ? onClose : undefined}></div>
+
+      <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="relative bg-white rounded-lg shadow-2xl w-full max-w-4xl mx-4 my-8">
+        <div className="sticky top-0 bg-white border-b p-6 rounded-t-lg z-10">
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="text-2xl font-bold text-gray-900">תשלום מאובטח</h2>
+            {step > 1 && (
+              <button type="button" onClick={() => setStep(step - 1)} className="text-[#40E0D0] hover:text-[#30D5C8] flex items-center gap-2">
+                <ChevronRight className="w-5 h-5" /> חזרה
+              </button>
+            )}
+            <button onClick={onClose} className="text-gray-400 hover:text-gray-900" aria-label="סגור">
+              <X className="w-6 h-6" />
+            </button>
+          </div>
+
+          <div className="flex items-center justify-center gap-4">
+            <div className={`flex items-center gap-2 ${step >= 1 ? 'text-[#40E0D0]' : 'text-gray-400'}`}>
+              <div className={`w-8 h-8 rounded-full flex items-center justify-center ${step >= 1 ? 'bg-[#40E0D0] text-white' : 'bg-gray-200'}`}>
+                {step > 1 ? <CheckCircle className="w-5 h-5" /> : '1'}
+              </div>
+              <span className="text-sm font-medium">פרטי משלוח</span>
+            </div>
+            <div className={`w-16 h-1 ${step >= 2 ? 'bg-[#40E0D0]' : 'bg-gray-200'}`}></div>
+            <div className={`flex items-center gap-2 ${step >= 2 ? 'text-[#40E0D0]' : 'text-gray-400'}`}>
+              <div className={`w-8 h-8 rounded-full flex items-center justify-center ${step >= 2 ? 'bg-[#40E0D0] text-white' : 'bg-gray-200'}`}>
+                {step > 2 ? <CheckCircle className="w-5 h-5" /> : '2'}
+              </div>
+              <span className="text-sm font-medium">תשלום</span>
+            </div>
+            <div className={`w-16 h-1 ${step >= 3 ? 'bg-[#40E0D0]' : 'bg-gray-200'}`}></div>
+            <div className={`flex items-center gap-2 ${step >= 3 ? 'text-[#40E0D0]' : 'text-gray-400'}`}>
+              <div className={`w-8 h-8 rounded-full flex items-center justify-center ${step >= 3 ? 'bg-[#40E0D0] text-white' : 'bg-gray-200'}`}>3</div>
+              <span className="text-sm font-medium">סיכום</span>
+            </div>
+          </div>
+        </div>
+
+        <div className="p-6">
+          {step === 1 && (
+            <form onSubmit={handleShippingSubmit} className="space-y-6">
+              <h3 className="text-xl font-bold text-gray-900 mb-6 flex items-center gap-2">
+                <MapPin className="w-6 h-6" /> פרטי משלוח
+              </h3>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">שם מלא *</label>
+                  <input 
+                    type="text" 
+                    required 
+                    value={shippingData.fullName} 
+                    onChange={(e) => {
+                      setShippingData({ ...shippingData, fullName: e.target.value });
+                      if (validationErrors.fullName) {
+                        setValidationErrors({ ...validationErrors, fullName: '' });
+                      }
+                    }}
+                    className={`w-full border rounded-lg px-4 py-3 text-gray-900 focus:outline-none transition-colors ${
+                      validationErrors.fullName 
+                        ? 'border-red-500 focus:border-red-500' 
+                        : 'border-gray-300 focus:border-gold focus:ring-2 focus:ring-gold/20'
+                    }`} 
+                    placeholder="הזן שם מלא" 
+                  />
+                  {validationErrors.fullName && (
+                    <p className="text-red-500 text-sm mt-1">{validationErrors.fullName}</p>
+                  )}
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">אימייל</label>
+                  <input type="email" value={shippingData.email} onChange={(e) => setShippingData({ ...shippingData, email: e.target.value })} className="w-full border border-gray-300 rounded-lg px-4 py-3 text-gray-900 focus:outline-none focus:border-gold focus:ring-2 focus:ring-gold/20 transition-colors" placeholder="הזן אימייל" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">טלפון *</label>
+                  <input 
+                    type="tel" 
+                    required 
+                    value={shippingData.phone} 
+                    onChange={(e) => {
+                      setShippingData({ ...shippingData, phone: e.target.value });
+                      if (validationErrors.phone) {
+                        setValidationErrors({ ...validationErrors, phone: '' });
+                      }
+                    }}
+                    className={`w-full border rounded-lg px-4 py-3 text-gray-900 focus:outline-none transition-colors ${
+                      validationErrors.phone 
+                        ? 'border-red-500 focus:border-red-500' 
+                        : 'border-gray-300 focus:border-gold focus:ring-2 focus:ring-gold/20'
+                    }`} 
+                    placeholder="הזן מספר טלפון" 
+                  />
+                  {validationErrors.phone && (
+                    <p className="text-red-500 text-sm mt-1">{validationErrors.phone}</p>
+                  )}
+                </div>
+                <div className="relative" ref={cityInputRef}>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">עיר *</label>
+                  <input 
+                    type="text" 
+                    required 
+                    value={shippingData.city} 
+                    onChange={(e) => {
+                      handleCityInputChange(e);
+                      if (validationErrors.city) {
+                        setValidationErrors({ ...validationErrors, city: '' });
+                      }
+                    }}
+                    onFocus={() => {
+                      if (shippingData.city.length > 0 && citySuggestions.length > 0) {
+                        setShowCitySuggestions(true);
+                      }
+                    }}
+                    className={`w-full border rounded-lg px-4 py-3 text-gray-900 focus:outline-none transition-colors ${
+                      validationErrors.city 
+                        ? 'border-red-500 focus:border-red-500' 
+                        : 'border-gray-300 focus:border-gold focus:ring-2 focus:ring-gold/20'
+                    }`} 
+                    placeholder="הזן עיר" 
+                    autoComplete="off"
+                  />
+                  {showCitySuggestions && citySuggestions.length > 0 && (
+                    <div className="absolute z-50 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                      {citySuggestions.map((city, index) => (
+                        <button
+                          key={index}
+                          type="button"
+                          onClick={() => handleCitySelect(city)}
+                          className="w-full text-right px-4 py-2 hover:bg-[#40E0D0] hover:text-white transition-colors first:rounded-t-lg last:rounded-b-lg"
+                        >
+                          {city}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  {validationErrors.city && (
+                    <p className="text-red-500 text-sm mt-1">{validationErrors.city}</p>
+                  )}
                 </div>
               </div>
 
-              {/* Checkout Button */}
-              <button
-                onClick={() => {
-                  alert('המעבר לתשלום יגיע בקרוב!');
-                  onClose();
-                }}
-                className="w-full bg-[#4A6741] hover:bg-[#5a7a51] text-white px-6 py-3 rounded-lg font-semibold transition-colors"
-              >
-                המשך לתשלום
-              </button>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">כתובת משלוח *</label>
+                <input 
+                  type="text" 
+                  required 
+                  value={shippingData.address} 
+                  onChange={(e) => {
+                    setShippingData({ ...shippingData, address: e.target.value });
+                    if (validationErrors.address) {
+                      setValidationErrors({ ...validationErrors, address: '' });
+                    }
+                  }}
+                  className={`w-full border rounded-lg px-4 py-3 text-gray-900 focus:outline-none transition-colors ${
+                    validationErrors.address 
+                      ? 'border-red-500 focus:border-red-500' 
+                      : 'border-gray-300 focus:border-gold focus:ring-2 focus:ring-gold/20'
+                  }`} 
+                  placeholder="הזן כתובת מלאה" 
+                />
+                {validationErrors.address && (
+                  <p className="text-red-500 text-sm mt-1">{validationErrors.address}</p>
+                )}
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">מיקוד</label>
+                  <input type="text" value={shippingData.postalCode} onChange={(e) => setShippingData({ ...shippingData, postalCode: e.target.value })} className="w-full border border-gray-300 rounded-lg px-4 py-3 text-gray-900 focus:outline-none focus:border-gold focus:ring-2 focus:ring-gold/20 transition-colors" placeholder="הזן מיקוד" />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">הערות למשלוח</label>
+                <textarea rows={3} value={shippingData.notes} onChange={(e) => setShippingData({ ...shippingData, notes: e.target.value })} className="w-full border border-gray-300 rounded-lg px-4 py-3 text-gray-900 focus:outline-none focus:border-gold focus:ring-2 focus:ring-gold/20 transition-colors resize-none" placeholder="הערות נוספות (אופציונלי)" />
+              </div>
+
+              <div className="flex gap-4 pt-4">
+                <button type="button" onClick={onClose} className="flex-1 border border-gray-300 text-gray-700 hover:bg-gray-50 px-6 py-3 rounded-lg font-semibold transition-colors">ביטול</button>
+                <button type="submit" className="flex-1 bg-[#40E0D0] hover:bg-[#30D5C8] text-white px-6 py-3 rounded-lg font-semibold transition-colors">המשך לתשלום</button>
+              </div>
+            </form>
+          )}
+
+          {step === 2 && (
+            <form onSubmit={handlePaymentSubmit} className="space-y-6">
+              <h3 className="text-xl font-bold text-gray-900 mb-6 flex items-center gap-2">
+                <Phone className="w-6 h-6" /> תשלום בביט
+              </h3>
+
+              <div className="bg-green-50 border border-green-200 rounded-lg p-6">
+                <div className="flex items-start gap-3">
+                  <Phone className="w-6 h-6 text-green-600 flex-shrink-0 mt-1" />
+                  <div>
+                    <p className="text-green-800 font-semibold mb-2">תשלום בביט</p>
+                    <p className="text-green-700 text-sm">אחרי שתסיים את ההזמנה, תוכל לשלם בביט דרך וואטסאפ. נשלח לך הודעה עם פרטי התשלום.</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex gap-4 pt-4">
+                <button type="button" onClick={() => setStep(1)} className="flex-1 border border-gray-300 text-gray-700 hover:bg-gray-50 px-6 py-3 rounded-lg font-semibold transition-colors">חזרה</button>
+                <button type="submit" className="flex-1 bg-[#40E0D0] hover:bg-[#30D5C8] text-white px-6 py-3 rounded-lg font-semibold transition-colors">המשך לסיכום</button>
+              </div>
+            </form>
+          )}
+
+          {step === 3 && (
+            <div className="space-y-6 max-h-[calc(90vh-200px)] overflow-y-auto">
+              <h3 className="text-xl font-bold text-gray-900 mb-6">סיכום הזמנה</h3>
+
+              <div className="border border-gray-200 rounded-lg p-4 bg-gray-50">
+                <h4 className="font-semibold text-gray-900 mb-4 text-lg">מוצרים בסל ({cartToUse.length})</h4>
+                <div className="space-y-3 max-h-96 overflow-y-auto pr-2" style={{ scrollbarWidth: 'thin' }}>
+                  {cartToUse.map(item => (
+                    <div key={item.id} className="flex items-center justify-between pb-3 border-b border-gray-300 last:border-0 last:pb-0 bg-white p-3 rounded-lg">
+                      <div className="flex items-center gap-4 flex-1 min-w-0">
+                        <div className="w-20 h-20 rounded-lg overflow-hidden bg-gray-100 flex-shrink-0 flex items-center justify-center relative border border-gray-200">
+                          {item.imageUrl ? (
+                            <>
+                              <img 
+                                src={
+                                  item.imageUrl.startsWith('http') 
+                                    ? item.imageUrl 
+                                    : item.imageUrl.startsWith('/') 
+                                      ? getApiUrl(item.imageUrl)
+                                      : getApiUrl(`/${item.imageUrl}`)
+                                } 
+                                alt={item.name} 
+                                className="w-full h-full object-cover"
+                                onError={(e) => {
+                                  // Hide image and show fallback
+                                  e.target.style.display = 'none';
+                                  const fallback = e.target.nextElementSibling;
+                                  if (fallback) fallback.style.display = 'flex';
+                                }}
+                              />
+                              <div className="text-2xl hidden absolute inset-0 items-center justify-center bg-gray-100">{item.image || '🕯️'}</div>
+                            </>
+                          ) : (
+                            <div className="text-3xl">{item.image || (item.isGiftCard ? '🎁' : '🕯️')}</div>
+                          )}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="font-semibold text-gray-900 mb-1 text-base">{item.name}</p>
+                          <p className="text-sm text-gray-600">כמות: {item.quantity} × ₪{Number(item.price).toFixed(2)}</p>
+                          {item.isGiftCard && item.giftCardEmail && (
+                            <p className="text-xs text-gray-500 mt-1">אימייל: {item.giftCardEmail}</p>
+                          )}
+                        </div>
+                      </div>
+                      <div className="text-right flex-shrink-0 ml-4">
+                        <p className="font-bold text-gray-900 text-lg">₪{(Number(item.price) * item.quantity).toFixed(2)}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="border border-gray-200 rounded-lg p-4">
+                <h4 className="font-semibold text-gray-900 mb-4">פרטי משלוח</h4>
+                <div className="space-y-2 text-sm text-gray-700">
+                  <p><span className="font-semibold">שם:</span> {shippingData.fullName}</p>
+                  <p><span className="font-semibold">טלפון:</span> {shippingData.phone}</p>
+                  <p><span className="font-semibold">כתובת:</span> {shippingData.address}, {shippingData.city}</p>
+                  {shippingData.postalCode && <p><span className="font-semibold">מיקוד:</span> {shippingData.postalCode}</p>}
+                </div>
+              </div>
+
+              <div className="border border-gray-200 rounded-lg p-4">
+                <GiftCardApply
+                  orderTotal={cartTotal + shippingFee}
+                  onApply={(data) => {
+                    setGiftCardAmount(data.applied);
+                    setGiftCardCode(data.code || null);
+                  }}
+                />
+              </div>
+
+              <div className="border border-gray-200 rounded-lg p-4">
+                <PromoGiftApply
+                  orderTotal={cartTotal + shippingFee - giftCardAmount}
+                  onApply={(applied) => {
+                    setPromoAmount(applied);
+                  }}
+                />
+              </div>
+
+              <div className="border border-gray-200 rounded-lg p-4">
+                <div className="space-y-3">
+                  <div className="flex justify-between text-gray-700">
+                    <span>סה"כ מוצרים</span>
+                    <span>₪{cartTotal.toFixed(2)}</span>
+                  </div>
+                  <div className="flex justify-between text-gray-700">
+                    <span>משלוח</span>
+                    <span>{shippingFee === 0 ? <span className="text-green-600">חינם</span> : `₪${shippingFee.toFixed(2)}`}</span>
+                  </div>
+                  {giftCardAmount > 0 && (
+                    <div className="flex justify-between text-green-600">
+                      <span>Gift Card</span>
+                      <span>-₪{giftCardAmount.toFixed(2)}</span>
+                    </div>
+                  )}
+                  {promoAmount > 0 && (
+                    <div className="flex justify-between text-green-600">
+                      <span>קוד מבצע</span>
+                      <span>-₪{promoAmount.toFixed(2)}</span>
+                    </div>
+                  )}
+                  {shippingFee === 0 && cartTotal >= 300 && <p className="text-sm text-green-600">✓ משלוח חינם מעל ₪300</p>}
+                  <div className="border-t pt-3 flex justify-between text-lg font-bold text-gray-900">
+                    <span>סה"כ לתשלום</span>
+                    <span>₪{finalTotal.toFixed(2)}</span>
+                  </div>
+                </div>
+              </div>
+
+              {saveError && (
+                <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-4">
+                  <p className="text-red-800 text-sm">{saveError}</p>
+                </div>
+              )}
+
+              <div className="flex gap-4 pt-4">
+                <button type="button" onClick={() => setStep(2)} className="flex-1 border border-gray-300 text-gray-700 hover:bg-gray-50 px-6 py-3 rounded-lg font-semibold transition-colors">חזרה</button>
+                <button onClick={handleCompleteOrder} disabled={isProcessing} className="flex-1 bg-[#40E0D0] hover:bg-[#30D5C8] text-white px-6 py-3 rounded-lg font-semibold transition-colors disabled:opacity-60 disabled:cursor-not-allowed">
+                  {isProcessing ? 'מעבד הזמנה...' : 'אשר והזמן'}
+                </button>
+              </div>
             </div>
           )}
         </div>
@@ -926,61 +1814,100 @@ function CartModal({ isOpen, onClose, cart, onUpdateQuantity, onRemoveItem }) {
   );
 }
 
-function Footer() {
+function CartModal({ isOpen, onClose, cart, onUpdateQuantity, onRemoveItem, onCheckout }) {
+  if (!isOpen) return null;
+
+  const cartTotal = cart.reduce((sum, item) => sum + (Number(item.price) * item.quantity), 0);
+  const isEmpty = cart.length === 0;
+
   return (
-    <footer className="bg-[#2C3E27] text-white py-12">
-      <Section>
-        <div className="grid md:grid-cols-3 gap-8 mb-8">
-          {/* Shop */}
-          <div>
-            <h3 className="font-semibold mb-4">חנות</h3>
-            <ul className="space-y-2 text-sm text-white/80">
-              <li><a href="#בית" className="hover:text-white transition">בית</a></li>
-              <li><a href="#גלריה" className="hover:text-white transition">קטלוג</a></li>
-              <li><a href="#הזמנה" className="hover:text-white transition">יצירת קשר</a></li>
-            </ul>
-          </div>
-          
-          {/* Connect */}
-          <div>
-            <h3 className="font-semibold mb-4">יצירת קשר</h3>
-            <div className="flex gap-4">
-              <a href="https://facebook.com" className="hover:opacity-70 transition" target="_blank" rel="noopener noreferrer">
-                <Facebook className="w-5 h-5" />
-              </a>
-              <a href="https://instagram.com" className="hover:opacity-70 transition" target="_blank" rel="noopener noreferrer">
-                <Instagram className="w-5 h-5" />
-              </a>
-              <a href="tel:0546998603" className="hover:opacity-70 transition">
-                <Phone className="w-5 h-5" />
-              </a>
-              <a href="mailto:info@luxcera.com" className="hover:opacity-70 transition">
-                <Mail className="w-5 h-5" />
-              </a>
+    <div className="fixed inset-0 z-50 flex items-center justify-center">
+      <div className="absolute inset-0 bg-black/50" onClick={onClose}></div>
+      <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="relative bg-white rounded-lg shadow-2xl w-full max-w-md mx-4 flex flex-col" style={{ height: '90vh', maxHeight: '90vh' }}>
+        <div className="flex justify-between items-center p-6 border-b flex-shrink-0">
+          <h2 className="text-2xl font-bold text-gray-900">עגלת קניות</h2>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-900" aria-label="סגור">
+            <X className="w-6 h-6" />
+          </button>
+        </div>
+
+        <div className="overflow-y-scroll p-6" style={{ flex: '1 1 auto', minHeight: 0, maxHeight: '100%' }}>
+          {isEmpty ? (
+            <div className="text-center py-12">
+              <h3 className="text-2xl font-bold text-gray-900 mb-4">Your cart is empty</h3>
+              <p className="text-gray-600 mb-2">
+                Have an account?
+                <a href="#" className="underline font-medium hover:text-gray-900"> Log in</a> to check out faster.
+              </p>
+              <button onClick={onClose} className="mt-6 w-full bg-[#40E0D0] hover:bg-[#30D5C8] text-white px-6 py-3 rounded-lg font-semibold transition-colors">
+                Continue shopping
+              </button>
             </div>
-          </div>
-          
-          {/* Newsletter */}
-          <div>
-            <h3 className="font-semibold mb-4">הצטרפות לקהילה שלנו</h3>
-            <form className="flex gap-2">
-              <input 
-                type="email" 
-                placeholder="אימייל"
-                className="flex-1 bg-white/10 border-b-2 border-white/30 text-white placeholder-white/50 px-2 py-2 focus:outline-none focus:border-white transition-colors"
-              />
-              <button type="submit" className="text-white hover:opacity-70 transition">→</button>
-            </form>
-          </div>
+          ) : (
+            <div className="space-y-4">
+              {cart.map(item => (
+                <div key={item.id} className="flex items-center gap-4 border-b pb-4">
+                  <div className="w-20 h-20 bg-gray-100 rounded-lg flex items-center justify-center flex-shrink-0">
+                    {item.imageUrl ? (
+                      <img 
+                        src={item.imageUrl.startsWith('http') ? item.imageUrl : getApiUrl(item.imageUrl.startsWith('/') ? item.imageUrl : `/${item.imageUrl}`)}
+                        alt={item.name}
+                        className="w-full h-full object-cover rounded-lg"
+                        onError={(e) => {
+                          e.target.style.display = 'none';
+                        }}
+                      />
+                    ) : (
+                      <div className={`w-12 h-12 rounded-full ${item.color || 'bg-gray-300'}`}></div>
+                    )}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <h4 className="font-semibold text-gray-900">{item.name}</h4>
+                    {item.scent && <p className="text-gray-600 text-sm">{item.scent}</p>}
+                    <div className="flex items-center gap-4 mt-2">
+                      <div className="flex items-center gap-2 border border-gray-300 rounded-lg">
+                        <button onClick={() => onUpdateQuantity(item.id, item.quantity - 1)} className="p-1 hover:bg-gray-100" aria-label="הפחת כמות">
+                          <Minus className="w-4 h-4" />
+                        </button>
+                        <span className="px-3 py-1 text-sm">{item.quantity}</span>
+                        <button onClick={() => onUpdateQuantity(item.id, item.quantity + 1)} className="p-1 hover:bg-gray-100" aria-label="הוסף כמות">
+                          <Plus className="w-4 h-4" />
+                        </button>
+                      </div>
+                      <button onClick={() => onRemoveItem(item.id)} className="text-red-500 hover:text-red-700" aria-label="הסר פריט">
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+                  <div className="text-right flex-shrink-0">
+                    <p className="font-bold text-gray-900">₪{(Number(item.price) * item.quantity).toFixed(2)}</p>
+                    <p className="text-sm text-gray-600">₪{Number(item.price).toFixed(2)} ליחידה</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
-        
-        <div className="border-t border-white/20 pt-8 text-center text-sm text-white/60">
-          © 2025 LUXCERA, Powered by Roi Zohar. All rights reserved.
-        </div>
-      </Section>
-    </footer>
+
+        {!isEmpty && (
+          <div className="border-t p-6 bg-white flex-shrink-0">
+            <div className="flex justify-between items-center mb-4">
+              <span className="text-gray-700 font-semibold">סה"כ</span>
+              <span className="text-2xl font-bold text-gray-900">₪{cartTotal.toFixed(2)}</span>
+            </div>
+            <button
+              onClick={() => { onClose(); onCheckout?.(); }}
+              className="w-full bg-[#40E0D0] hover:bg-[#30D5C8] text-white px-6 py-3 rounded-lg font-semibold transition-colors"
+            >
+              המשך לתשלום
+            </button>
+          </div>
+        )}
+      </motion.div>
+    </div>
   );
 }
+
 
 function AccessibilityWidget() {
   const [isOpen, setIsOpen] = React.useState(false);
@@ -1003,111 +1930,35 @@ function AccessibilityWidget() {
     largeCursor: false,
   });
 
-  const toggleSetting = (key) => {
-    setSettings(prev => ({ ...prev, [key]: !prev[key] }));
-  };
+  const toggleSetting = (key) => setSettings(prev => ({ ...prev, [key]: !prev[key] }));
 
   const applyStyles = () => {
     const root = document.documentElement;
     const body = document.body;
-    
-    // Font size
-    if (settings.fontSize !== 100) {
-      root.style.fontSize = `${settings.fontSize}%`;
-    } else {
-      root.style.fontSize = '';
-    }
-    
-    // Screen zoom
-    if (settings.screenZoom !== 100) {
-      root.style.zoom = `${settings.screenZoom}%`;
-    } else {
-      root.style.zoom = '';
-    }
-    
-    // Highlight links
-    if (settings.highlightLinks) {
-      body.classList.add('highlight-links');
-    } else {
-      body.classList.remove('highlight-links');
-    }
-    
-    // Highlight headings
-    if (settings.highlightHeadings) {
-      body.classList.add('highlight-headings');
-    } else {
-      body.classList.remove('highlight-headings');
-    }
-    
-    // Fixed descriptions for images
-    if (settings.fixedDescription) {
-      body.classList.add('fixed-descriptions');
-    } else {
-      body.classList.remove('fixed-descriptions');
-    }
-    
-    // Show descriptions on images
-    if (settings.showDescription) {
-      body.classList.add('show-descriptions');
-    } else {
-      body.classList.remove('show-descriptions');
-    }
-    
-    // Disable blinks/animations
-    if (settings.disableBlinks) {
-      body.classList.add('disable-blinks');
-    } else {
-      body.classList.remove('disable-blinks');
-    }
-    
-    // Keyboard navigation
-    if (settings.keyboardNav) {
-      body.classList.add('keyboard-navigation');
-      // הוספת tabindex לכל הכפתורים והקישורים
-      document.querySelectorAll('button, a, input, select, textarea').forEach(el => {
-        if (!el.hasAttribute('tabindex')) {
-          el.setAttribute('tabindex', el.disabled ? '-1' : '0');
-        }
-      });
-    } else {
-      body.classList.remove('keyboard-navigation');
-    }
-    
-    // Cursor settings
-    if (settings.blackCursor) {
-      body.classList.add('black-cursor');
-    } else {
-      body.classList.remove('black-cursor');
-    }
-    
-    if (settings.largeCursor) {
-      body.classList.add('large-cursor');
-    } else {
-      body.classList.remove('large-cursor');
-    }
-    
-    // Combine filters - priorities: invertColors > highContrast > blackYellow > sepia > monochrome
+    root.style.fontSize = settings.fontSize !== 100 ? `${settings.fontSize}%` : '';
+    // zoom לא תקני בכל הדפדפנים, אך שימושי לדמו
+    root.style.zoom = settings.screenZoom !== 100 ? `${settings.screenZoom}%` : '';
+
+    body.classList.toggle('highlight-links', !!settings.highlightLinks);
+    body.classList.toggle('highlight-headings', !!settings.highlightHeadings);
+    body.classList.toggle('fixed-descriptions', !!settings.fixedDescription);
+    body.classList.toggle('show-descriptions', !!settings.showDescription);
+    body.classList.toggle('disable-blinks', !!settings.disableBlinks);
+    body.classList.toggle('keyboard-navigation', !!settings.keyboardNav);
+    body.classList.toggle('black-cursor', !!settings.blackCursor);
+    body.classList.toggle('large-cursor', !!settings.largeCursor);
+
     const filters = [];
-    if (settings.invertColors) {
-      filters.push('invert(1)');
-    } else if (settings.highContrast) {
-      filters.push('contrast(1.5)');
-    } else if (settings.blackYellow) {
-      filters.push('contrast(2) brightness(1.5)');
-    } else if (settings.sepia) {
-      filters.push('sepia(1)');
-    } else if (settings.monochrome) {
-      filters.push('grayscale(1)');
-    }
-    
+    if (settings.invertColors) filters.push('invert(1)');
+    else if (settings.highContrast) filters.push('contrast(1.5)');
+    else if (settings.blackYellow) filters.push('contrast(2) brightness(1.5)');
+    else if (settings.sepia) filters.push('sepia(1)');
+    else if (settings.monochrome) filters.push('grayscale(1)');
     body.style.filter = filters.join(' ');
   };
 
-  React.useEffect(() => {
-    applyStyles();
-  }, [settings]);
+  React.useEffect(() => { applyStyles(); }, [settings]);
 
-  // לפי התמונה - 19 כפתורים בשורה אחת (מימין לשמאל)
   const accessButtons = [
     { icon: Minimize2, label: 'הקטנת מסך', action: () => setSettings(s => ({ ...s, screenZoom: Math.max(50, s.screenZoom - 10) })) },
     { icon: Maximize2, label: 'הגדלת מסך', action: () => setSettings(s => ({ ...s, screenZoom: Math.min(150, s.screenZoom + 10) })) },
@@ -1130,13 +1981,12 @@ function AccessibilityWidget() {
     { icon: Headphones, label: 'מצב קריאה', action: () => toggleSetting('readingMode') },
   ];
 
-  // Wheelchair icon SVG
   const WheelchairIcon = ({ className }) => (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-      <circle cx="12" cy="4" r="2"/>
-      <path d="M20 20h-6l-2-6h-4"/>
-      <circle cx="8" cy="16" r="2"/>
-      <circle cx="18" cy="20" r="2"/>
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+      <circle cx="12" cy="4" r="2" />
+      <path d="M20 20h-6l-2-6h-4" />
+      <circle cx="8" cy="16" r="2" />
+      <circle cx="18" cy="20" r="2" />
     </svg>
   );
 
@@ -1154,112 +2004,169 @@ function AccessibilityWidget() {
 
   return (
     <>
-      {/* Accessibility Panel - Fixed to bottom */}
       <div className="fixed bottom-0 left-0 right-0 z-50 bg-white shadow-2xl border-t-4 border-blue-600">
-          {/* Header */}
-          <div className="bg-blue-600 text-white p-4 flex items-center gap-4">
-            <button onClick={() => setIsOpen(false)} className="text-white hover:opacity-80 bg-white/20 px-2 py-1 rounded">
-              ESC
-            </button>
-            <div className="w-8 h-8 bg-white rounded-full flex items-center justify-center">
-              <WheelchairIcon className="w-6 h-6 text-blue-600" />
-            </div>
-            <div className="flex-1 bg-blue-700/50 px-4 py-2 rounded text-sm">
-              ניתן לנווט בין כפתורים עם חצי המקלדת
-            </div>
+        <div className="bg-blue-600 text-white p-4 flex items-center gap-4">
+          <button onClick={() => setIsOpen(false)} className="text-white hover:opacity-80 bg-white/20 px-2 py-1 rounded">ESC</button>
+          <div className="w-8 h-8 bg-white rounded-full flex items-center justify-center">
+            <WheelchairIcon className="w-6 h-6 text-blue-600" />
           </div>
+          <div className="flex-1 bg-blue-700/50 px-4 py-2 rounded text-sm">ניתן לנווט בין כפתורים עם חצי המקלדת</div>
+        </div>
 
-          {/* Buttons Grid */}
-          <div className="bg-gray-100 overflow-x-auto">
-            <div className="flex gap-2 p-4 min-w-max">
-              {accessButtons.map((btn, idx) => (
-                <button
-                  key={idx}
-                  onClick={btn.action}
-                  className="flex flex-col items-center gap-2 p-3 bg-white hover:bg-blue-50 border border-gray-300 rounded-lg transition-all hover:border-blue-400 hover:shadow-md flex-shrink-0 w-24"
-                >
-                  <btn.icon className="w-6 h-6 text-gray-800" />
-                  <span className="text-xs font-medium text-gray-800 text-center leading-tight">{btn.label}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Warning */}
-          <div className="p-6 bg-yellow-50 border-t-2 border-yellow-200">
-            <div className="flex items-start gap-3">
-              <AlertTriangle className="w-6 h-6 text-yellow-600 flex-shrink-0 mt-0.5" />
-              <p className="text-base text-yellow-900 leading-relaxed">
-                אזהרה! הרחק מהישג ידם של ילדים וחיות מחמד. אל תשאיר נרות דולקים או פניני שעווה ללא השגחה בקרבת חפצים דליקים. אל תזיז את הנר בעת בעירה או כשהוא חם.
-              </p>
-            </div>
-          </div>
-
-          {/* Footer */}
-          <div className="flex items-center justify-between p-4 bg-gray-100 border-t-2 border-gray-200">
-            <div className="flex items-center gap-2">
-              <span className="text-sm text-gray-600">מופעל על ידי</span>
-              <span className="text-sm font-bold text-blue-600">LUXCERA ACCESSIBILITY</span>
-            </div>
-            <div className="flex items-center gap-3">
-              <button className="p-2 hover:bg-gray-200 rounded transition">
-                <Flag className="w-5 h-5 text-gray-600" />
+        <div className="bg-gray-100 overflow-x-auto">
+          <div className="flex gap-2 p-4 min-w-max">
+            {accessButtons.map((btn, idx) => (
+              <button
+                key={idx}
+                onClick={btn.action}
+                className="flex flex-col items-center gap-2 p-3 bg-white hover:bg-blue-50 border border-gray-300 rounded-lg transition-all hover:border-blue-400 hover:shadow-md flex-shrink-0 w-24"
+              >
+                <btn.icon className="w-6 h-6 text-gray-800" />
+                <span className="text-xs font-medium text-gray-800 text-center leading-tight">{btn.label}</span>
               </button>
-              <button className="p-2 hover:bg-gray-200 rounded transition">
-                <Mail className="w-5 h-5 text-gray-600" />
-              </button>
-              <button onClick={() => setSettings({
-                fontSize: 100,
-                highlightLinks: false,
-                highlightHeadings: false,
-                invertColors: false,
-                highContrast: false,
-                sepia: false,
-                monochrome: false,
-                screenZoom: 100,
-                blackYellow: false,
-                readingMode: false,
-                fixedDescription: false,
-                showDescription: false,
-                disableBlinks: false,
-                keyboardNav: false,
-                blackCursor: false,
-                largeCursor: false,
-              })} className="p-2 hover:bg-gray-200 rounded transition">
-                <RotateCcw className="w-5 h-5 text-gray-600" />
-              </button>
-            </div>
+            ))}
           </div>
         </div>
+
+        <div className="p-6 bg-yellow-50 border-t-2 border-yellow-200">
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="w-6 h-6 text-yellow-600 flex-shrink-0 mt-0.5" />
+            <p className="text-base text-yellow-900 leading-relaxed">
+              אזהרה! הרחק מהישג ידם של ילדים וחיות מחמד. אל תשאיר נרות דולקים או פניני שעווה ללא השגחה בקרבת חפצים דליקים. אל תזיז את הנר בעת בעירה או כשהוא חם.
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center justify-between p-4 bg-gray-100 border-t-2 border-gray-200">
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-gray-600">מופעל על ידי</span>
+            <span className="text-sm font-bold text-blue-600">LUXCERA ACCESSIBILITY</span>
+          </div>
+          <div className="flex items-center gap-3">
+            <button className="p-2 hover:bg-gray-200 rounded transition" aria-label="דיווח בעיה">
+              <Flag className="w-5 h-5 text-gray-600" />
+            </button>
+            <button className="p-2 hover:bg-gray-200 rounded transition" aria-label="יצירת קשר">
+              <Mail className="w-5 h-5 text-gray-600" />
+            </button>
+            <button
+              onClick={() => setSettings({
+                fontSize: 100, highlightLinks: false, highlightHeadings: false, invertColors: false, highContrast: false,
+                sepia: false, monochrome: false, screenZoom: 100, blackYellow: false, readingMode: false, fixedDescription: false,
+                showDescription: false, disableBlinks: false, keyboardNav: false, blackCursor: false, largeCursor: false,
+              })}
+              className="p-2 hover:bg-gray-200 rounded transition"
+              aria-label="איפוס הגדרות"
+            >
+              <RotateCcw className="w-5 h-5 text-gray-600" />
+            </button>
+          </div>
+        </div>
+      </div>
     </>
   );
 }
 
 export default function LuxceraLanding() {
+  // בדיקה אם יש קישור Gift Card ב-URL
+  const [giftCardCode, setGiftCardCode] = React.useState(() => {
+    // בדיקה ראשונית של ה-URL
+    if (typeof window !== 'undefined') {
+      const path = window.location.pathname;
+      const match = path.match(/^\/giftcard\/([^\/]+)$/);
+      if (match && match[1]) {
+        return match[1];
+      }
+    }
+    return null;
+  });
+
   const [cartOpen, setCartOpen] = React.useState(false);
   const [accountOpen, setAccountOpen] = React.useState(false);
-  const [cart, setCart] = React.useState([]);
+  const [searchOpen, setSearchOpen] = React.useState(false);
+  const [checkoutOpen, setCheckoutOpen] = React.useState(false);
+  // טעינת סל מ-localStorage בהתחלה
+  const [cart, setCart] = React.useState(() => {
+    try {
+      const savedCart = localStorage.getItem('luxcera_cart');
+      if (savedCart) {
+        return JSON.parse(savedCart);
+      }
+    } catch (e) {
+      console.error('Error loading cart from localStorage:', e);
+    }
+    return [];
+  });
   const [isLoggedIn, setIsLoggedIn] = React.useState(false);
+  const [userName, setUserName] = React.useState(''); // שם המשתמש
+  const [pendingCartOpen, setPendingCartOpen] = React.useState(false); // האם צריך לפתוח עגלה אחרי התחברות
 
-  const handleCartClick = () => setCartOpen(true);
+  // טעינת מצב התחברות ושם משתמש מ-localStorage
+  React.useEffect(() => {
+    const savedLoginState = localStorage.getItem('luxcera_isLoggedIn');
+    const savedUserName = localStorage.getItem('luxcera_userName');
+    
+    if (savedLoginState === 'true' && savedUserName) {
+      setIsLoggedIn(true);
+      setUserName(savedUserName);
+    }
+  }, []);
+
+  // שמירת מצב התחברות ושם משתמש ב-localStorage
+  React.useEffect(() => {
+    if (isLoggedIn && userName) {
+      localStorage.setItem('luxcera_isLoggedIn', 'true');
+      localStorage.setItem('luxcera_userName', userName);
+    } else {
+      localStorage.removeItem('luxcera_isLoggedIn');
+      localStorage.removeItem('luxcera_userName');
+    }
+  }, [isLoggedIn, userName]);
+
+  // שמירת עגלה ב-localStorage בכל פעם שהעגלה משתנה
+  React.useEffect(() => {
+    try {
+      if (cart.length > 0) {
+        localStorage.setItem('luxcera_cart', JSON.stringify(cart));
+      } else {
+        localStorage.removeItem('luxcera_cart');
+      }
+    } catch (e) {
+      console.error('Error saving cart to localStorage:', e);
+    }
+  }, [cart]);
+
+  const handleCartClick = () => {
+    if (!isLoggedIn) {
+      // אם המשתמש לא מחובר - פותחים את מודאל ההתחברות
+      setPendingCartOpen(true); // מסמן שצריך לפתוח עגלה אחרי התחברות
+      setAccountOpen(true);
+    } else {
+      // אם המשתמש מחובר - פותחים את העגלה
+      setCartOpen(true);
+    }
+  };
   const handleCloseCart = () => setCartOpen(false);
   const handleAccountClick = () => setAccountOpen(true);
-  const handleCloseAccount = () => setAccountOpen(false);
+  const handleCloseAccount = () => {
+    setAccountOpen(false);
+    // אם המשתמש התחבר ואמור לפתוח עגלה - פותחים אותה
+    if (isLoggedIn && pendingCartOpen) {
+      setPendingCartOpen(false);
+      setCartOpen(true);
+    }
+  };
+  const handleSearchClick = () => setSearchOpen(true);
+  const handleCloseSearch = () => setSearchOpen(false);
+  const handleCheckout = () => setCheckoutOpen(true);
+  const handleCloseCheckout = () => setCheckoutOpen(false);
 
   const handleUpdateQuantity = (id, newQuantity) => {
-    if (newQuantity <= 0) {
-      handleRemoveItem(id);
-      return;
-    }
-    setCart(cart.map(item => 
-      item.id === id ? { ...item, quantity: newQuantity } : item
-    ));
+    if (newQuantity <= 0) { handleRemoveItem(id); return; }
+    setCart(cart.map(item => item.id === id ? { ...item, quantity: newQuantity } : item));
   };
 
-  const handleRemoveItem = (id) => {
-    setCart(cart.filter(item => item.id !== id));
-  };
-
+  const handleRemoveItem = (id) => setCart(cart.filter(item => item.id !== id));
   const cartCount = cart.reduce((sum, item) => sum + item.quantity, 0);
 
   const handleAddToCart = (product) => {
@@ -1271,77 +2178,124 @@ export default function LuxceraLanding() {
     }
   };
 
-  // מוצרים לפי קטגוריות
-  const sets = [
-    { id: 1, name: 'WHITE AMBER SET', price: 219, inStock: false, color: 'bg-white', image: '📿' },
-    { id: 2, name: 'ALLISON SET', price: 259, inStock: true, color: 'bg-white', image: '🕯️' },
-    { id: 3, name: 'BLACK AMBER SET', price: 219, inStock: true, color: 'bg-gray-900', image: '🕯️' },
-    { id: 4, name: 'AMÉLIE SET MEDIUM', price: 169, inStock: true, color: 'bg-white', image: '🏺' },
-    { id: 5, name: 'HÉLÈNE SET', price: 399, inStock: true, color: 'bg-white', image: '🌸' },
-  ];
+  // Load products from API
+  const [allProducts, setAllProducts] = React.useState([]);
+  const [loadingProducts, setLoadingProducts] = React.useState(true);
 
-  const fireplace = [
-    { id: 101, name: 'FIREFLOW BASIC', price: 450, inStock: true, color: 'bg-orange-50', image: '🔥' },
-    { id: 102, name: 'FIREFLOW PREMIUM', price: 650, inStock: true, color: 'bg-red-50', image: '🔥' },
-    { id: 103, name: 'FIREFLOW LUXURY', price: 899, inStock: true, color: 'bg-amber-50', image: '🔥' },
-  ];
+  React.useEffect(() => {
+    const loadProducts = async () => {
+      try {
+        setLoadingProducts(true);
+        const response = await fetch(getApiUrl('/api/public/products'));
+        if (response.ok) {
+          const data = await response.json();
+          // Transform API data to match component structure
+          const transformed = (data.products || []).map(product => ({
+            id: product.id,
+            name: product.title,
+            price: product.salePrice || product.price, // The active price for cart (salePrice if exists, otherwise price)
+            originalPrice: product.price, // Always the original price (will be crossed out if salePrice exists)
+            salePrice: product.salePrice || null, // Sale price if exists (will be displayed in red)
+            inStock: product.isActive === 1 || product.isActive === true,
+            color: product.color || 'bg-white',
+            image: product.imageUrl || '🕯️',
+            imageUrl: product.imageUrl, // Keep original for display
+            category: product.category || 'general',
+            description: product.description,
+          }));
+          setAllProducts(transformed);
+        } else {
+          console.error('Failed to load products:', response.status);
+          setAllProducts([]);
+        }
+      } catch (error) {
+        console.error('Error loading products:', error);
+        setAllProducts([]);
+      } finally {
+        setLoadingProducts(false);
+      }
+    };
+    loadProducts();
+  }, []);
 
-  const waxPearls = [
-    { id: 201, name: 'PEARLS VANILLA', price: 89, inStock: true, color: 'bg-yellow-50', image: '💛' },
-    { id: 202, name: 'PEARLS LAVENDER', price: 89, inStock: true, color: 'bg-purple-50', image: '💜' },
-    { id: 203, name: 'PEARLS ROSE', price: 89, inStock: true, color: 'bg-pink-50', image: '💗' },
-    { id: 204, name: 'PEARLS COCONUT', price: 89, inStock: true, color: 'bg-blue-50', image: '💙' },
-  ];
+  // Group products by category
+  const sets = allProducts.filter(p => p.category === 'sets' || p.category === 'מארזים' || p.category === 'general');
+  const fireplace = allProducts.filter(p => p.category === 'fireplace' || p.category === 'אח');
+  const waxPearls = allProducts.filter(p => p.category === 'pearls' || p.category === 'פנינים');
+  const accessories = allProducts.filter(p => p.category === 'accessories' || p.category === 'אביזרים');
 
-  const accessories = [
-    { id: 301, name: 'HOLDER GOLD', price: 129, inStock: true, color: 'bg-yellow-100', image: '✨' },
-    { id: 302, name: 'HOLDER SILVER', price: 129, inStock: true, color: 'bg-gray-100', image: '✨' },
-    { id: 303, name: 'WICK TRIMMER', price: 45, inStock: true, color: 'bg-slate-100', image: '✂️' },
-    { id: 304, name: 'CANDLE EXTINGUISHER', price: 35, inStock: true, color: 'bg-stone-100', image: '🔔' },
-  ];
+  // אם יש Gift Card code, הצג את הדף שלו
+  if (giftCardCode) {
+    return (
+      <GiftCardView 
+        code={giftCardCode} 
+        onBack={() => {
+          setGiftCardCode(null);
+          window.history.pushState({}, '', '/');
+        }} 
+      />
+    );
+  }
 
   return (
-    <div dir="rtl" className="min-h-screen bg-white">
+    <div dir="rtl" className="min-h-screen bg-ivory">
       <PromoBanner />
-      <Nav onCartClick={handleCartClick} onUserClick={handleAccountClick} cartCount={cartCount} />
+      <Nav onCartClick={handleCartClick} onUserClick={handleAccountClick} onSearchClick={handleSearchClick} cartCount={cartCount} isLoggedIn={isLoggedIn} userName={userName} />
+      <SearchModal isOpen={searchOpen} onClose={handleCloseSearch} products={allProducts} onAddToCart={handleAddToCart} />
       <AccountModal 
         isOpen={accountOpen} 
-        onClose={handleCloseAccount}
-        isLoggedIn={isLoggedIn}
-        setIsLoggedIn={setIsLoggedIn}
+        onClose={handleCloseAccount} 
+        isLoggedIn={isLoggedIn} 
+        showCartMessage={pendingCartOpen}
+        setIsLoggedIn={(loggedIn) => {
+          setIsLoggedIn(loggedIn);
+          if (!loggedIn) {
+            setUserName(''); // איפוס שם המשתמש בהתנתקות
+          }
+          // אם המשתמש התחבר ואמור לפתוח עגלה - פותחים אותה
+          if (loggedIn && pendingCartOpen) {
+            setPendingCartOpen(false);
+            setAccountOpen(false);
+            // פתיחת העגלה אחרי זמן קצר כדי שהמודאל יסגר קודם
+            setTimeout(() => {
+              setCartOpen(true);
+            }, 300);
+          }
+        }}
+        onLoginSuccess={(name) => {
+          setUserName(name);
+        }}
       />
-      <CartModal 
-        isOpen={cartOpen} 
-        onClose={handleCloseCart} 
+      <CartModal isOpen={cartOpen} onClose={handleCloseCart} cart={cart} onUpdateQuantity={handleUpdateQuantity} onRemoveItem={handleRemoveItem} onCheckout={handleCheckout} />
+      <CheckoutModal
+        isOpen={checkoutOpen}
+        onClose={handleCloseCheckout}
         cart={cart}
-        onUpdateQuantity={handleUpdateQuantity}
-        onRemoveItem={handleRemoveItem}
+        onOrderComplete={(orderData) => {
+          // מרוקנים את הסל רק אחרי שההזמנה הושלמה בהצלחה
+          if (orderData && orderData.orderId) {
+            setCart([]);
+            localStorage.removeItem('luxcera_cart');
+          }
+          console.log('Order completed:', orderData);
+        }}
       />
       <Hero />
-      
-      {/* קרסלות מוצרים */}
-      <ProductsCarousel 
-        title="מארזים"
-        products={sets}
-        onAddToCart={handleAddToCart}
+
+      <CategoryShowcase 
+        sets={sets} 
+        waxPearls={waxPearls} 
+        accessories={accessories} 
       />
-      <ProductsCarousel 
-        title="קמיני אש לבית"
-        products={fireplace}
-        onAddToCart={handleAddToCart}
-      />
-      <ProductsCarousel 
-        title="פניני שעווה"
-        products={waxPearls}
-        onAddToCart={handleAddToCart}
-      />
-      <ProductsCarousel 
-        title="אביזרים"
-        products={accessories}
-        onAddToCart={handleAddToCart}
-      />
-      
+
       <Gallery />
+      <Section id="gift-card" className="py-16 bg-ivory">
+        <div className="text-center mb-8">
+          <h2 className="text-4xl font-bold text-gray-900 mb-4" style={{ fontFamily: 'serif' }}>לרכישת כרטיס קוד קופון/GIFT CARD</h2>
+        </div>
+        <GiftCardEntryButton />
+      </Section>
+      <About />
       <OrderForm />
       <Footer />
       <AccessibilityWidget />
