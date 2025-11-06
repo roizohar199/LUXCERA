@@ -9,6 +9,8 @@ import CancellationPolicyPage from './pages/CancellationPolicyPage';
 import ShippingAndReturnsPage from './pages/ShippingAndReturnsPage';
 import GiftCardPage from './pages/GiftCardPage';
 import CategoryPage from './pages/CategoryPage';
+import MyOrdersPage from './pages/MyOrdersPage';
+import ContactPage from './pages/ContactPage';
 import ErrorBoundary from './components/ErrorBoundary';
 import { AppProvider } from './context/AppContext';
 
@@ -28,6 +30,8 @@ ReactDOM.createRoot(document.getElementById('root')).render(
               <Route path="/shipping-and-returns" element={<ShippingAndReturnsPage />} />
               <Route path="/gift-card" element={<GiftCardPage />} />
               <Route path="/category/:category" element={<CategoryPage />} />
+              <Route path="/my-orders" element={<MyOrdersPage />} />
+              <Route path="/contact" element={<ContactPage />} />
             </Routes>
           </BrowserRouter>
         </AppProvider>

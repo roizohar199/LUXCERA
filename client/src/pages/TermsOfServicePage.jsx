@@ -1,25 +1,33 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useApp } from '../context/AppContext';
 import TermsOfService from '../components/TermsOfService';
 import Footer from '../components/Footer';
 import Layout from '../components/Layout';
 
 function TermsOfServicePage() {
   const navigate = useNavigate();
+  const { getCartCount, isLoggedIn } = useApp();
   
-  // Mock handlers for Nav component
-  const handleCartClick = () => navigate('/');
+  // טעינת שם משתמש מ-localStorage
+  const [userName, setUserName] = React.useState('');
+  React.useEffect(() => {
+    const savedUserName = localStorage.getItem('luxcera_userName');
+    if (savedUserName) {
+      setUserName(savedUserName);
+    }
+  }, []);
+  
   const handleUserClick = () => navigate('/');
   const handleSearchClick = () => navigate('/');
 
   return (
     <Layout 
-      onCartClick={handleCartClick}
       onUserClick={handleUserClick}
       onSearchClick={handleSearchClick}
-      cartCount={0}
-      isLoggedIn={false}
-      userName=""
+      cartCount={getCartCount()}
+      isLoggedIn={isLoggedIn}
+      userName={userName}
     >
       <TermsOfService />
       <Footer />

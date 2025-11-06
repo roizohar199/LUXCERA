@@ -204,6 +204,25 @@ export async function initDatabase() {
       }
     }
 
+    // User carts table (עגלות קניות למשתמשים)
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS user_carts (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        user_id INT NOT NULL,
+        product_id INT,
+        price DECIMAL(10,2) NOT NULL,
+        quantity INT NOT NULL DEFAULT 1,
+        name VARCHAR(255),
+        image_url VARCHAR(500),
+        category VARCHAR(100),
+        created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+        INDEX idx_user_carts_user_id (user_id),
+        INDEX idx_user_carts_product_id (product_id)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    `);
+
     // Promo Gifts table (מנגנון נפרד מ-Gift Cards)
     await pool.query(`
       CREATE TABLE IF NOT EXISTS promo_gifts (

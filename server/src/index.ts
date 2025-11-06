@@ -19,6 +19,7 @@ import productsRoutes from './routes/products.js';
 import ordersRoutes from './routes/orders.js';
 import giftCardRoutes from './routes/giftcards.js';
 import promoGiftRoutes from './routes/promoGifts.js';
+import cartRoutes from './routes/cart.js';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
@@ -417,6 +418,9 @@ app.use('/api/public/products', productsRoutes);
 
 // Orders routes
 app.use('/api/orders', ordersRoutes);
+
+// Cart routes (for logged-in users)
+app.use('/api/cart', cartRoutes);
 
 // גיפט קארד – חלק עם CSRF בפנים
 app.use('/api/giftcards', giftCardRoutes);

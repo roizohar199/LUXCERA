@@ -1,5 +1,6 @@
 import React from 'react';
 import { motion } from 'framer-motion';
+import { useNavigate, Link } from 'react-router-dom';
 import { useGoogleLogin } from '@react-oauth/google';
 import {
   Search, User, ShoppingBag, Phone, Mail, Instagram, Facebook, Menu, X, Trash2, Plus, Minus, Package,
@@ -77,7 +78,12 @@ function PromoBanner() {
 
 function Nav({ onCartClick, onUserClick, onSearchClick, cartCount, isLoggedIn, userName }) {
   const [mobileMenuOpen, setMobileMenuOpen] = React.useState(false);
-  const links = [{ name: 'בית', href: '#בית' }, { name: 'קטלוג', href: '#קטלוג' }, { name: 'יצירת קשר', href: '#הזמנה' }];
+  const navigate = useNavigate();
+  const links = [
+    { name: 'בית', href: '#בית', onClick: () => window.location.hash = 'בית' },
+    { name: 'קטלוג', href: '#קטלוג', onClick: () => window.location.hash = 'קטלוג' },
+    { name: 'יצירת קשר', href: '/contact', onClick: () => navigate('/contact') }
+  ];
 
   return (
     <nav className="sticky top-0 w-full z-50 bg-black shadow-md" aria-label="ניווט ראשי">
@@ -88,7 +94,11 @@ function Nav({ onCartClick, onUserClick, onSearchClick, cartCount, isLoggedIn, u
 
         <div className="hidden md:flex gap-8 text-gold text-base">
           {links.map(link => (
-            <a key={link.name} href={link.href} className="hover:text-gold/80 transition font-medium">{link.name}</a>
+            link.href.startsWith('/') ? (
+              <Link key={link.name} to={link.href} onClick={link.onClick} className="hover:text-gold/80 transition font-medium">{link.name}</Link>
+            ) : (
+              <a key={link.name} href={link.href} onClick={link.onClick} className="hover:text-gold/80 transition font-medium">{link.name}</a>
+            )
           ))}
         </div>
 
@@ -116,13 +126,19 @@ function Nav({ onCartClick, onUserClick, onSearchClick, cartCount, isLoggedIn, u
         </div>
       </div>
 
-      {mobileMenuOpen && (
+          {mobileMenuOpen && (
         <div className="md:hidden bg-black border-t border-gold/30">
           <div className="px-4 py-3 space-y-2">
             {links.map(link => (
-              <a key={link.name} href={link.href} className="block text-gold hover:bg-gold/10 p-2" onClick={() => setMobileMenuOpen(false)}>
-                {link.name}
-              </a>
+              link.href.startsWith('/') ? (
+                <Link key={link.name} to={link.href} onClick={() => { link.onClick(); setMobileMenuOpen(false); }} className="block text-gold hover:bg-gold/10 p-2">
+                  {link.name}
+                </Link>
+              ) : (
+                <a key={link.name} href={link.href} onClick={() => { link.onClick(); setMobileMenuOpen(false); }} className="block text-gold hover:bg-gold/10 p-2">
+                  {link.name}
+                </a>
+              )
             ))}
           </div>
         </div>
@@ -169,9 +185,11 @@ function Hero() {
             <p className="text-lg text-gold mb-10 max-w-2xl mx-auto leading-relaxed">
               נרות שעווה יוקרתיים בעבודת יד, עם ריחות מרגיעים וצבעים מותאמים אישית
             </p>
-            <motion.a href="#הזמנה" whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} className="inline-block bg-gold hover:bg-gold/90 text-black-lux px-10 py-4 rounded-xl font-semibold transition-colors shadow-gold text-lg border-2 border-gold">
-              הזמן עכשיו
-            </motion.a>
+            <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+              <Link to="/contact" className="inline-block bg-gold hover:bg-gold/90 text-black-lux px-10 py-4 rounded-xl font-semibold transition-colors shadow-gold text-lg border-2 border-gold">
+                הזמן עכשיו
+              </Link>
+            </motion.div>
           </motion.div>
         </div>
       </div>
@@ -414,217 +432,49 @@ function About() {
   );
 }
 
-function OrderForm() {
-  const [model, setModel] = React.useState({
-    fullName: "",
-    email: "",
-    phone: "",
-    category: "נרות",
-    color: "",
-    scent: "",
-    qty: 1,
-    message: ""
-  });
-  const [status, setStatus] = React.useState({ sending: false, ok: null, error: "" });
-
-  const validate = () => {
-    if (!model.fullName || model.fullName.trim().length < 2) return 'שם מלא חובה (מינ׳ 2 תווים)';
-    if (model.fullName.trim().length > 100) return 'שם יכול להכיל עד 100 תווים';
-
-    const hasEmail = !!model.email?.trim();
-    const hasPhone = !!model.phone?.trim();
-    if (!hasEmail && !hasPhone) return 'חובה למלא אימייל או טלפון אחד לפחות';
-
-    if (hasEmail && !/^\S+@\S+\.\S+$/.test(model.email.trim())) return 'אימייל לא תקין';
-
-    if (hasPhone) {
-      const digitsOnly = model.phone.replace(/\D/g, '');
-      if (digitsOnly.length < 8) return 'טלפון חייב להכיל לפחות 8 ספרות';
-    }
-
-    if (!model.category || !['נרות', 'גבס', 'חרסינה', 'אפוקסי'].includes(model.category)) return 'יש לבחור קטגוריה';
-
-    const qtyNum = Number(model.qty);
-    if (!Number.isFinite(qtyNum) || !Number.isInteger(qtyNum) || qtyNum < 1) return 'כמות חייבת להיות מספר שלם 1 ומעלה';
-    if (qtyNum > 1000) return 'כמות מקסימלית היא 1000';
-
-    if (!model.message || model.message.trim().length < 3) return 'הודעה חובה (מינ׳ 3 תווים)';
-    if (model.message.trim().length > 2000) return 'הודעה יכולה להכיל עד 2000 תווים';
-
-    return null;
-  };
-
-  const submit = async (e) => {
-    e.preventDefault();
-    const validationError = validate();
-    if (validationError) {
-      setStatus({ sending: false, ok: false, error: validationError });
-      return;
-    }
-
-    setStatus({ sending: true, ok: null, error: "" });
-    try {
-      // קבל CSRF token לפני שליחת הבקשה
-      const csrfToken = await getCsrfToken();
-      
-      const res = await fetch(getApiUrl('/api/contact'), {
-        method: 'POST',
-        credentials: 'include', // חובה כדי לשלוח עוגיות
-        headers: {
-          'Content-Type': 'application/json',
-          'X-CSRF-Token': csrfToken, // שולח את הטוקן בכותרת
-        },
-        body: JSON.stringify({
-          ...model,
-          qty: Number(model.qty) || 1,
-          email: model.email.trim() || undefined,
-          phone: model.phone.trim() || undefined,
-        }),
-      });
-
-      // ייתכן ושרת מחזיר non-JSON בשגיאה → מגן
-      let data = { ok: false, error: 'שגיאה' };
-      try {
-        data = await res.json();
-      } catch {
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      }
-
-      if (res.ok && data?.ok) {
-        setStatus({ sending: false, ok: true, error: "" });
-        setModel({ fullName: "", email: "", phone: "", category: "נרות", color: "", scent: "", qty: 1, message: "" });
-      } else {
-        setStatus({ sending: false, ok: false, error: data?.error || 'שגיאה' });
-      }
-    } catch (err) {
-      setStatus({ sending: false, ok: false, error: 'שגיאת רשת' });
-    }
-  };
-
-  return (
-    <Section id="הזמנה" className="py-20 bg-ivory">
-      <div className="max-w-2xl mx-auto">
-        <h2 className="text-4xl font-bold text-gray-900 mb-8 text-center">יצירת קשר</h2>
-
-        <form onSubmit={submit} className="space-y-4" noValidate>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <input
-                className="w-full border border-sage/40 rounded-lg px-4 py-3 text-gray-900 placeholder-gray-500 focus:outline-none focus:border-gold focus:ring-2 focus:ring-gold/20 transition-colors"
-                placeholder="שם מלא *"
-                required
-                value={model.fullName}
-                onChange={e => setModel({ ...model, fullName: e.target.value })}
-                aria-label="שם מלא"
-              />
-            </div>
-            <div>
-              <input
-                className="w-full border border-sage/40 rounded-lg px-4 py-3 text-gray-900 placeholder-gray-500 focus:outline-none focus:border-gold focus:ring-2 focus:ring-gold/20 transition-colors"
-                type="email"
-                placeholder="אימייל"
-                value={model.email}
-                onChange={e => setModel({ ...model, email: e.target.value })}
-                aria-label="אימייל"
-              />
-            </div>
-          </div>
-
-          <input
-            className="w-full border border-gray-300 rounded-lg px-4 py-3 text-gray-900 placeholder-gray-500 focus:outline-none focus:border-gold focus:ring-2 focus:ring-gold/20 transition-colors"
-            type="tel"
-            placeholder="טלפון"
-            value={model.phone}
-            onChange={e => setModel({ ...model, phone: e.target.value })}
-            aria-label="טלפון"
-          />
-
-          <div className="grid grid-cols-2 gap-4">
-            <select
-              className="border border-gray-300 rounded-lg px-4 py-3 text-gray-900 focus:outline-none focus:border-gold focus:ring-2 focus:ring-gold/20 transition-colors"
-              value={model.category}
-              onChange={e => setModel({ ...model, category: e.target.value })}
-              aria-label="קטגוריה"
-            >
-              <option>נרות</option>
-              <option>גבס</option>
-              <option>חרסינה</option>
-              <option>אפוקסי</option>
-            </select>
-            <input
-              className="border border-gray-300 rounded-lg px-4 py-3 text-gray-900 placeholder-gray-500 focus:outline-none focus:border-gold focus:ring-2 focus:ring-gold/20 transition-colors"
-              placeholder="צבע"
-              value={model.color}
-              onChange={e => setModel({ ...model, color: e.target.value })}
-              aria-label="צבע"
-            />
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <input
-              className="border border-gray-300 rounded-lg px-4 py-3 text-gray-900 placeholder-gray-500 focus:outline-none focus:border-gold focus:ring-2 focus:ring-gold/20 transition-colors"
-              placeholder="ריח"
-              value={model.scent}
-              onChange={e => setModel({ ...model, scent: e.target.value })}
-              aria-label="ריח"
-            />
-            <input
-              type="number"
-              min={1}
-              className="border border-gray-300 rounded-lg px-4 py-3 text-gray-900 placeholder-gray-500 focus:outline-none focus:border-gold focus:ring-2 focus:ring-gold/20 transition-colors"
-              placeholder="כמות"
-              value={model.qty}
-              onChange={e => setModel({ ...model, qty: Number(e.target.value || 1) })}
-              aria-label="כמות"
-            />
-          </div>
-
-          <textarea
-            rows={4}
-            className="w-full border border-gray-300 rounded-lg px-4 py-3 text-gray-900 placeholder-gray-500 focus:outline-none focus:border-gold focus:ring-2 focus:ring-gold/20 transition-colors resize-none"
-            placeholder="הודעה *"
-            required
-            value={model.message}
-            onChange={e => setModel({ ...model, message: e.target.value })}
-            aria-label="הודעה"
-          />
-
-          <button
-            type="submit"
-            disabled={status.sending}
-            className="w-full bg-black hover:bg-black-lux text-gold px-6 py-4 rounded-lg font-semibold transition-colors disabled:opacity-60 disabled:cursor-not-allowed border border-gold/20"
-          >
-            {status.sending ? 'שולח…' : 'שלח הודעה'}
-          </button>
-
-          {status.ok && <div className="text-green-600 text-sm text-center" role="status">ההודעה נשלחה. נחזור אליך בהקדם 🙏</div>}
-          {status.ok === false && <div className="text-red-600 text-sm text-center" role="alert">שגיאה בשליחה: {status.error}</div>}
-        </form>
-
-        <div className="mt-8 text-center">
-          <p className="text-gray-600 mb-4 text-sm">או פנו ישירות בוואטסאפ:</p>
-          <a
-            href={`https://wa.me/972546998603?text=${encodeURIComponent("היי LUXCERA, אשמח להזמנה/התאמה אישית 🙏")}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-2 bg-black hover:bg-black-lux text-gold px-6 py-3 rounded-lg font-semibold transition-colors border border-gold/20"
-          >
-            <Phone className="w-5 h-5" />
-            וואטסאפ LUXCERA
-          </a>
-        </div>
-      </div>
-    </Section>
-  );
-}
 
 function AccountModal({ isOpen, onClose, isLoggedIn, setIsLoggedIn, showCartMessage = false, onLoginSuccess }) {
+  const navigate = useNavigate();
   const [mode, setMode] = React.useState('login'); // 'login' or 'register'
-  const [formData, setFormData] = React.useState({ fullName: '', email: '', password: '', confirmPassword: '', phone: '' });
+  
+  // טעינת פרטי משתמש מ-localStorage בהתחלה
+  const [formData, setFormData] = React.useState(() => {
+    if (typeof window !== 'undefined') {
+      const savedEmail = localStorage.getItem('luxcera_userEmail');
+      const savedUserName = localStorage.getItem('luxcera_userName');
+      return {
+        fullName: savedUserName || '',
+        email: savedEmail || '',
+        password: '',
+        confirmPassword: '',
+        phone: ''
+      };
+    }
+    return { fullName: '', email: '', password: '', confirmPassword: '', phone: '' };
+  });
+  
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState('');
   const [showSuccessMessage, setShowSuccessMessage] = React.useState(false);
   const [successType, setSuccessType] = React.useState(''); // 'login' or 'register'
+  
+  // עדכון פרטי משתמש מ-localStorage כשהמודאל נפתח והמשתמש מחובר
+  React.useEffect(() => {
+    if (isOpen && isLoggedIn) {
+      const savedEmail = localStorage.getItem('luxcera_userEmail');
+      const savedUserName = localStorage.getItem('luxcera_userName');
+      if (savedEmail || savedUserName) {
+        setFormData(prev => ({
+          ...prev,
+          email: savedEmail || prev.email,
+          fullName: savedUserName || prev.fullName,
+        }));
+      }
+    } else if (!isLoggedIn) {
+      // אם המשתמש לא מחובר, איפוס formData
+      setFormData({ fullName: '', email: '', password: '', confirmPassword: '', phone: '' });
+    }
+  }, [isOpen, isLoggedIn]);
 
   const googleLogin = useGoogleLogin({
     onSuccess: async (tokenResponse) => {
@@ -664,7 +514,12 @@ function AccountModal({ isOpen, onClose, isLoggedIn, setIsLoggedIn, showCartMess
             // המשתמש קיים - מאפשרים התחברות
             // נשתמש בשם מהמשתמש ב-DB אם קיים, אחרת מהמשתמש ב-Google
             const fullName = loginData.user?.full_name || userInfo.name || 'משתמש';
-            setFormData({ fullName, email: userInfo.email || '', password: '', confirmPassword: '', phone: '' });
+            const userEmail = userInfo.email || '';
+            setFormData({ fullName, email: userEmail, password: '', confirmPassword: '', phone: '' });
+            // שמירת אימייל ב-localStorage
+            if (userEmail) {
+              localStorage.setItem('luxcera_userEmail', userEmail);
+            }
             setLoading(false);
             setIsLoggedIn(true);
             onLoginSuccess?.(fullName); // עדכון שם המשתמש ב-parent component
@@ -702,9 +557,14 @@ function AccountModal({ isOpen, onClose, isLoggedIn, setIsLoggedIn, showCartMess
           }
 
           const fullName = userInfo.name || 'משתמש';
-          setFormData({ fullName, email: userInfo.email || '', password: '', confirmPassword: '', phone: '' });
+          const userEmail = userInfo.email || '';
+          setFormData({ fullName, email: userEmail, password: '', confirmPassword: '', phone: '' });
           setLoading(false);
           setIsLoggedIn(true);
+          // שמירת אימייל ב-localStorage
+          if (userEmail) {
+            localStorage.setItem('luxcera_userEmail', userEmail);
+          }
           onLoginSuccess?.(fullName); // עדכון שם המשתמש ב-parent component
           setSuccessType('register');
           setShowSuccessMessage(true);
@@ -810,8 +670,6 @@ function AccountModal({ isOpen, onClose, isLoggedIn, setIsLoggedIn, showCartMess
         return;
       }
       googleLogin();
-    } else {
-      alert(`התחברות עם ${provider} תושק בקרוב!`);
     }
   };
 
@@ -835,15 +693,27 @@ function AccountModal({ isOpen, onClose, isLoggedIn, setIsLoggedIn, showCartMess
           <div className="p-6 space-y-4">
             <div className="flex items-center gap-4 pb-4 border-b">
               <div className="w-16 h-16 bg-[#40E0D0] rounded-full flex items-center justify-center text-white text-2xl font-bold">
-                {formData.fullName ? formData.fullName[0].toUpperCase() : 'U'}
+                {(formData.fullName || (typeof window !== 'undefined' && localStorage.getItem('luxcera_userName'))) 
+                  ? (formData.fullName || localStorage.getItem('luxcera_userName') || 'U')[0].toUpperCase() 
+                  : 'U'}
               </div>
               <div>
-                <h3 className="font-bold text-gray-900">{formData.fullName || 'משתמש'}</h3>
-                <p className="text-sm text-gray-600">{formData.email || 'email@example.com'}</p>
+                <h3 className="font-bold text-gray-900">
+                  {formData.fullName || (typeof window !== 'undefined' && localStorage.getItem('luxcera_userName')) || 'משתמש'}
+                </h3>
+                <p className="text-sm text-gray-600">
+                  {formData.email || (typeof window !== 'undefined' && localStorage.getItem('luxcera_userEmail')) || 'email@example.com'}
+                </p>
               </div>
             </div>
 
-            <button className="w-full flex items-center justify-between border border-gray-300 rounded-lg p-4 hover:bg-gray-50 transition-colors">
+            <button 
+              onClick={() => {
+                onClose();
+                navigate('/my-orders');
+              }}
+              className="w-full flex items-center justify-between border border-gray-300 rounded-lg p-4 hover:bg-gray-50 transition-colors"
+            >
               <div className="flex items-center gap-3">
                 <Package className="w-5 h-5 text-gray-700" />
                 <span className="font-semibold text-gray-900">הזמנות שלי</span>
@@ -883,12 +753,12 @@ function AccountModal({ isOpen, onClose, isLoggedIn, setIsLoggedIn, showCartMess
         </div>
 
         {showCartPrompt && (
-          <div className="mx-6 mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+          <div className="mx-6 mt-4 p-4 bg-yellow-50 border-l-4 border-yellow-400 rounded-lg">
             <div className="flex items-start gap-3">
-              <ShoppingBag className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
+              <ShoppingBag className="w-5 h-5 text-yellow-600 flex-shrink-0 mt-0.5" />
               <div>
-                <p className="text-blue-800 font-semibold text-sm mb-1">עגלת הקניות שלך מחכה לך!</p>
-                <p className="text-blue-700 text-sm">אנא התחבר או הירשם כדי לצפות בעגלת הקניות שלך ולהשלים את ההזמנה.</p>
+                <p className="text-yellow-800 font-bold text-sm mb-1">עליך להתחבר או להירשם לאתר כדי להוסיף פריטים לסל</p>
+                <p className="text-yellow-700 text-sm">אנא התחבר/הירשם באמצעות Google או הרשמה רגילה, ואז תוכל להוסיף פריטים לסל הקניות שלך ולהשלים את ההזמנה.</p>
               </div>
             </div>
           </div>
@@ -908,17 +778,6 @@ function AccountModal({ isOpen, onClose, isLoggedIn, setIsLoggedIn, showCartMess
                 <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
               </svg>
               המשך עם Google
-            </button>
-
-            <button
-              type="button"
-              onClick={() => handleSocialLogin('Apple')}
-              className="w-full flex items-center justify-center gap-3 border-2 border-gray-900 bg-gray-900 text-white rounded-lg p-3 hover:bg-gray-800 transition-colors font-semibold"
-            >
-              <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
-                <path d="M17.05 20.28c-.98.95-2.05.88-3.08.4-1.09-.5-2.08-.48-3.24 0-1.44.62-2.2.44-3.06-.4C2.79 15.25 3.51 7.59 9.05 7.31c1.35.07 2.29.74 3.08.8 1.18-.24 2.31-.93 3.57-.84 1.51.12 2.65.72 3.4 1.8-3.12 1.87-2.38 5.98.48 7.13-.57 1.5-1.31 2.99-2.54 4.09ל.01-.01zM12.03 7.25c-.15-2.23 1.66-4.07 3.74-4.25.29 2.58-2.34 4.5-3.74 4.25z" />
-              </svg>
-              המשך עם Apple
             </button>
 
             <div className="relative py-4">
@@ -2068,6 +1927,7 @@ function AccessibilityWidget() {
 }
 
 export default function LuxceraLanding() {
+  const navigate = useNavigate();
   // בדיקה אם יש קישור Gift Card ב-URL
   const [giftCardCode, setGiftCardCode] = React.useState(() => {
     // בדיקה ראשונית של ה-URL
@@ -2170,6 +2030,16 @@ export default function LuxceraLanding() {
   const cartCount = cart.reduce((sum, item) => sum + item.quantity, 0);
 
   const handleAddToCart = (product) => {
+    // בדיקה אם המשתמש מחובר
+    if (!isLoggedIn) {
+      // אם המשתמש לא מחובר - פתיחת מודאל ההרשמה עם הודעה
+      setPendingCartOpen(true); // מסמן שצריך לפתוח עגלה אחרי התחברות
+      setAccountOpen(true);
+      // אפשר להוסיף כאן הודעה נוספת אם צריך
+      return;
+    }
+    
+    // אם המשתמש מחובר - הוספה רגילה לסל
     const existingItem = cart.find(item => item.id === product.id);
     if (existingItem) {
       handleUpdateQuantity(product.id, existingItem.quantity + 1);
@@ -2296,7 +2166,6 @@ export default function LuxceraLanding() {
         <GiftCardEntryButton />
       </Section>
       <About />
-      <OrderForm />
       <Footer />
       <AccessibilityWidget />
     </div>

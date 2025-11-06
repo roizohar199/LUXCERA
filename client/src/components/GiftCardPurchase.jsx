@@ -10,7 +10,7 @@ export default function GiftCardPurchase({ onAddToCart }) {
 
   const amounts = [100, 200, 300, 400];
 
-  const handleAddToCart = () => {
+  const handleAddToCart = async () => {
     if (!email || !email.includes('@')) {
       setError('אנא הכנס אימייל תקין');
       return;
@@ -35,22 +35,31 @@ export default function GiftCardPurchase({ onAddToCart }) {
     // הוספה לסל
     if (onAddToCart) {
       // אם יש כמות > 1, נוסיף כל אחד בנפרד
+      let allAdded = true;
       for (let i = 0; i < quantity; i++) {
         const singleGiftCard = {
           ...giftCardProduct,
           id: `gift-card-${selectedAmount}-${Date.now()}-${i}`,
           quantity: 1,
         };
-        onAddToCart(singleGiftCard);
+        const result = await onAddToCart(singleGiftCard);
+        if (result === false) {
+          allAdded = false;
+          break;
+        }
       }
       
-      setSuccess(true);
-      setTimeout(() => {
-        setSuccess(false);
-        setEmail('');
-        setQuantity(1);
-        setSelectedAmount(100);
-      }, 2000);
+      if (allAdded) {
+        setSuccess(true);
+        setTimeout(() => {
+          setSuccess(false);
+          setEmail('');
+          setQuantity(1);
+          setSelectedAmount(100);
+        }, 2000);
+      } else {
+        setError('עליך להתחבר או להירשם לאתר כדי להוסיף פריטים לסל. אנא התחבר/הירשם ואז נסה שוב.');
+      }
     }
   };
 

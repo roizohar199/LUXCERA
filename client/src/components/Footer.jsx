@@ -21,7 +21,7 @@ function Footer() {
             <ul className="space-y-2 text-sm text-white/80">
               <li><a href="#בית" className="hover:text-white transition">בית</a></li>
               <li><a href="#קטלוג" className="hover:text-white transition">קטלוג</a></li>
-              <li><a href="#הזמנה" className="hover:text-white transition">יצירת קשר</a></li>
+              <li><Link to="/contact" className="hover:text-white transition">יצירת קשר</Link></li>
             </ul>
           </div>
 

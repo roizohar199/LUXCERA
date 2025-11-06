@@ -1,11 +1,11 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
-import ShippingAndReturnsPolicy from '../components/ShippingAndReturnsPolicy';
+import ContactForm from '../components/ContactForm';
 import Footer from '../components/Footer';
 import Layout from '../components/Layout';
 
-function ShippingAndReturnsPage() {
+function ContactPage() {
   const navigate = useNavigate();
   const { getCartCount, isLoggedIn } = useApp();
   
@@ -29,11 +29,11 @@ function ShippingAndReturnsPage() {
       isLoggedIn={isLoggedIn}
       userName={userName}
     >
-      <ShippingAndReturnsPolicy />
+      <ContactForm />
       <Footer />
     </Layout>
   );
 }
 
-export default ShippingAndReturnsPage;
+export default ContactPage;
 

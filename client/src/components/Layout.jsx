@@ -2,6 +2,9 @@ import React from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Search, User, ShoppingBag, Menu, X } from 'lucide-react';
 import luxceraLogo from '../assets/Luxcera Logo.png';
+import { useApp } from '../context/AppContext';
+import CartModal from './CartModal';
+import AccountModal from './AccountModal';
 
 function Nav({ onCartClick, onUserClick, onSearchClick, cartCount, isLoggedIn, userName }) {
   const [mobileMenuOpen, setMobileMenuOpen] = React.useState(false);
@@ -9,7 +12,7 @@ function Nav({ onCartClick, onUserClick, onSearchClick, cartCount, isLoggedIn, u
   const links = [
     { name: 'בית', href: '/', onClick: () => navigate('/') },
     { name: 'קטלוג', href: '/#קטלוג', onClick: () => navigate('/#קטלוג') },
-    { name: 'יצירת קשר', href: '/#הזמנה', onClick: () => navigate('/#הזמנה') }
+    { name: 'יצירת קשר', href: '/contact', onClick: () => navigate('/contact') }
   ];
 
   return (
@@ -37,7 +40,7 @@ function Nav({ onCartClick, onUserClick, onSearchClick, cartCount, isLoggedIn, u
           </button>
           <button onClick={onCartClick} className="relative text-gold hover:text-gold/80 transition" aria-label="עגלת קניות">
             <ShoppingBag className="w-6 h-6" />
-            {cartCount > 0 && (
+            {isLoggedIn && cartCount > 0 && (
               <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center" aria-live="polite">
                 {cartCount}
               </span>
@@ -65,17 +68,81 @@ function Nav({ onCartClick, onUserClick, onSearchClick, cartCount, isLoggedIn, u
 }
 
 function Layout({ children, onCartClick, onUserClick, onSearchClick, cartCount, isLoggedIn, userName }) {
+  const { 
+    cart, 
+    isCartOpen, 
+    openCart, 
+    closeCart, 
+    updateCartQuantity, 
+    removeFromCart,
+    getCartCount,
+    isAccountModalOpen,
+    openAccountModal,
+    closeAccountModal,
+    isLoggedIn: contextIsLoggedIn,
+    login,
+    logout
+  } = useApp();
+  
+  const [checkoutOpen, setCheckoutOpen] = React.useState(false);
+  
+  // אם לא הועבר cartCount, נשתמש ב-getCartCount מ-AppContext
+  const displayCartCount = cartCount !== undefined ? cartCount : getCartCount();
+  
+  // אם לא הועבר onCartClick, נשתמש ב-openCart מ-AppContext
+  const handleCartClick = onCartClick || openCart;
+  
+  // אם לא הועבר onUserClick, נשתמש ב-openAccountModal מ-AppContext
+  const handleUserClick = onUserClick || openAccountModal;
+  
+  // אם לא הועבר isLoggedIn, נשתמש ב-contextIsLoggedIn מ-AppContext
+  const displayIsLoggedIn = isLoggedIn !== undefined ? isLoggedIn : contextIsLoggedIn;
+  
+  const handleCheckout = () => {
+    closeCart();
+    setCheckoutOpen(true);
+  };
+  
+  const handleOrderComplete = () => {
+    setCheckoutOpen(false);
+  };
+  
+  const handleLoginSuccess = (name) => {
+    if (name) {
+      login({ name, email: localStorage.getItem('luxcera_userEmail') || '' });
+    }
+  };
+
   return (
     <div dir="rtl" className="min-h-screen bg-ivory">
       <Nav 
-        onCartClick={onCartClick}
-        onUserClick={onUserClick}
+        onCartClick={handleCartClick}
+        onUserClick={handleUserClick}
         onSearchClick={onSearchClick}
-        cartCount={cartCount}
-        isLoggedIn={isLoggedIn}
+        cartCount={displayCartCount}
+        isLoggedIn={displayIsLoggedIn}
         userName={userName}
       />
       {children}
+      <CartModal 
+        isOpen={isCartOpen}
+        onClose={closeCart}
+        cart={cart}
+        onUpdateQuantity={updateCartQuantity}
+        onRemoveItem={removeFromCart}
+        onCheckout={handleCheckout}
+      />
+      <AccountModal
+        isOpen={isAccountModalOpen}
+        onClose={closeAccountModal}
+        isLoggedIn={displayIsLoggedIn}
+        setIsLoggedIn={(loggedIn) => {
+          if (!loggedIn) {
+            logout();
+          }
+        }}
+        onLoginSuccess={handleLoginSuccess}
+      />
     </div>
   );
 }

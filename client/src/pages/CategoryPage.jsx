@@ -22,9 +22,18 @@ const getApiUrl = (path) => {
 function CategoryPage() {
   const { category } = useParams();
   const navigate = useNavigate();
-  const { addToCart } = useApp();
+  const { addToCart, getCartCount, isLoggedIn, openAccountModal } = useApp();
   const [allProducts, setAllProducts] = React.useState([]);
   const [loadingProducts, setLoadingProducts] = React.useState(true);
+  
+  // טעינת שם משתמש מ-localStorage
+  const [userName, setUserName] = React.useState('');
+  React.useEffect(() => {
+    const savedUserName = localStorage.getItem('luxcera_userName');
+    if (savedUserName) {
+      setUserName(savedUserName);
+    }
+  }, []);
 
   // Load products from API
   React.useEffect(() => {
@@ -63,15 +72,22 @@ function CategoryPage() {
   }, []);
   
   // פונקציה להוספה לסל
-  const handleAddToCart = (product) => {
-    addToCart(product);
+  const handleAddToCart = async (product) => {
+    const result = await addToCart(product);
+    if (result === false) {
+      // אם המשתמש לא מחובר - נווט לדף הבית עם הודעה
+      alert('עליך להתחבר או להירשם לאתר כדי להוסיף פריטים לסל. אנא התחבר/הירשם ואז נסה שוב.');
+      navigate('/');
+    }
   };
 
   // מיפוי קטגוריות
   const categoryMap = {
+    'sales': { title: 'מבצעים', filter: (p) => p.category === 'sales' || p.category === 'מבצעים' || p.on_sale === true || p.sale_price != null },
     'sets': { title: 'מארזים', filter: (p) => p.category === 'sets' || p.category === 'מארזים' || p.category === 'general' },
     'wax-pearls': { title: 'פניני שעווה', filter: (p) => p.category === 'pearls' || p.category === 'פנינים' },
     'accessories': { title: 'אביזרים', filter: (p) => p.category === 'accessories' || p.category === 'אביזרים' },
+    'gift-packages': { title: 'מארזי מתנה', filter: (p) => p.category === 'gift-packages' || p.category === 'מארזי מתנה' || p.category === 'gift' },
   };
 
   const categoryInfo = categoryMap[category];
@@ -79,12 +95,11 @@ function CategoryPage() {
   if (!categoryInfo) {
     return (
       <Layout
-        onCartClick={() => navigate('/')}
         onUserClick={() => navigate('/')}
         onSearchClick={() => navigate('/')}
-        cartCount={0}
-        isLoggedIn={false}
-        userName=""
+        cartCount={getCartCount()}
+        isLoggedIn={isLoggedIn}
+        userName={userName}
       >
         <div className="min-h-screen bg-ivory flex items-center justify-center">
           <div className="text-center">
@@ -104,19 +119,25 @@ function CategoryPage() {
 
   const filteredProducts = loadingProducts ? [] : allProducts.filter(categoryInfo.filter);
 
-  // Mock handlers for Nav
-  const handleCartClick = () => navigate('/');
-  const handleUserClick = () => navigate('/');
+  // Handlers for Nav - פותח מודאל התחברות במקום לנווט לדף הבית
+  const handleUserClick = () => {
+    if (isLoggedIn) {
+      // אם המשתמש מחובר - נווט לדף הבית (או אפשר לפתוח מודאל פרופיל)
+      navigate('/');
+    } else {
+      // אם המשתמש לא מחובר - פתח מודאל התחברות
+      openAccountModal();
+    }
+  };
   const handleSearchClick = () => navigate('/');
 
   return (
     <Layout
-      onCartClick={handleCartClick}
       onUserClick={handleUserClick}
       onSearchClick={handleSearchClick}
-      cartCount={0}
-      isLoggedIn={false}
-      userName=""
+      cartCount={getCartCount()}
+      isLoggedIn={isLoggedIn}
+      userName={userName}
     >
       <div className="min-h-screen bg-ivory pt-20">
         {loadingProducts ? (
