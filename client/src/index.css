@@ -10,6 +10,22 @@ html, body, #root {
   height: 100%; 
 }
 
+/* פונט גברת לוין */
+@font-face {
+  font-family: 'Mrs. Levin';
+  src: url('/fonts/MrsLevin-Regular.woff2') format('woff2'),
+       url('/fonts/MrsLevin-Regular.woff') format('woff'),
+       url('/fonts/MrsLevin-Regular.ttf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* מחלקה עזר לפונט גברת לוין */
+.font-mrs-levin {
+  font-family: 'Mrs. Levin', sans-serif;
+}
+
 body { 
   margin: 0; 
   background: #F9F6EE; 
@@ -197,5 +213,148 @@ body.large-cursor textarea {
   letter-spacing: 0.05em;
   border-bottom-left-radius: 8px;
   clip-path: polygon(0 0, 100% 0, 100% 100%, 0 85%);
+}
+
+/* עיצוב Modern Motion לקטגוריית מבצעים */
+.sale-banner {
+  position: relative;
+  width: 100%;
+  min-height: 280px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: radial-gradient(circle at center, #1a1a1a 0%, #000 100%);
+  color: #D4AF37;
+  text-align: center;
+  font-family: 'Playfair Display', serif;
+  overflow: hidden;
+  cursor: pointer;
+  transition: all 0.4s ease;
+  border-radius: 8px;
+}
+
+.sale-banner::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: 
+    radial-gradient(circle at 20% 50%, rgba(212, 175, 55, 0.1) 0%, transparent 50%),
+    radial-gradient(circle at 80% 50%, rgba(212, 175, 55, 0.1) 0%, transparent 50%);
+  animation: pulse 4s ease-in-out infinite;
+}
+
+.sale-banner::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: -50%;
+  width: 50%;
+  height: 100%;
+  background: linear-gradient(120deg, transparent, rgba(255, 255, 255, 0.4), transparent);
+  transform: skewX(-25deg);
+  animation: shine 3s infinite;
+}
+
+@keyframes shine {
+  0% { left: -50%; }
+  100% { left: 150%; }
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 0.5; }
+  50% { opacity: 1; }
+}
+
+.sale-banner:hover {
+  transform: scale(1.02);
+  box-shadow: 0 0 30px rgba(212, 175, 55, 0.4);
+}
+
+.sale-banner h1 {
+  font-size: 3rem;
+  font-weight: 700;
+  letter-spacing: 1px;
+  color: #D4AF37;
+  position: relative;
+  z-index: 2;
+  margin-bottom: 10px;
+}
+
+.sale-banner h1::after {
+  content: "";
+  position: absolute;
+  bottom: -10px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 100px;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, #D4AF37, transparent);
+  animation: lineGlow 2s ease-in-out infinite;
+}
+
+@keyframes lineGlow {
+  0%, 100% { opacity: 0.5; width: 100px; }
+  50% { opacity: 1; width: 150px; }
+}
+
+.sale-banner p {
+  font-size: 1.2rem;
+  color: #f7f3e9;
+  margin-top: 10px;
+  opacity: 0.9;
+  position: relative;
+  z-index: 2;
+}
+
+.sale-banner .sale-button {
+  margin-top: 20px;
+  display: inline-block;
+  padding: 12px 32px;
+  background: #D4AF37;
+  color: #000;
+  border-radius: 30px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  transition: all 0.3s ease;
+  position: relative;
+  z-index: 2;
+  overflow: hidden;
+  border: none;
+  cursor: pointer;
+}
+
+.sale-banner .sale-button::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.4), transparent);
+  transition: left 0.5s ease;
+}
+
+.sale-banner .sale-button:hover {
+  background: #e6c56f;
+  box-shadow: 0 0 20px rgba(212, 175, 55, 0.6);
+}
+
+.sale-banner .sale-button:hover::before {
+  left: 100%;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .sale-banner h1 {
+    font-size: 2rem;
+  }
+  
+  .sale-banner p {
+    font-size: 1rem;
+  }
 }
 
