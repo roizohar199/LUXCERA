@@ -47,22 +47,42 @@ export async function redeemGiftCard({ code, orderId, amountToApply }) {
     throw new Error('לא ניתן לקבל אסימון אבטחה. אנא רענן את הדף ונסה שוב.');
   }
   
-  const res = await fetch(getApiUrl('/api/giftcards/redeem'), {
-    method: 'POST',
-    credentials: 'include', // Important: include cookies (including _csrf cookie)
-    headers: {
-      'Content-Type': 'application/json',
-      'X-CSRF-Token': csrfToken,
-    },
-    body: JSON.stringify({ code, orderId, amountToApply }),
-  });
+  let res;
+  try {
+    res = await fetch(getApiUrl('/api/giftcards/redeem'), {
+      method: 'POST',
+      credentials: 'include', // Important: include cookies (including _csrf cookie)
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRF-Token': csrfToken,
+      },
+      body: JSON.stringify({ code, orderId, amountToApply }),
+    });
+  } catch (networkError) {
+    // טיפול בשגיאות רשת (ECONNREFUSED, proxy errors, וכו')
+    if (networkError.name === 'TypeError' || networkError.message.includes('fetch') || networkError.message.includes('ECONNREFUSED')) {
+      throw new Error('השרת לא זמין כרגע. אנא ודא שהשרת רץ ונסה שוב. אם הבעיה נמשכת, צור קשר עם התמיכה.');
+    }
+    throw new Error('שגיאת רשת. אנא נסה שוב מאוחר יותר.');
+  }
 
   if (!res.ok) {
-    const errorData = await res.json().catch(() => ({ error: 'Unknown error' }));
+    let errorData;
+    try {
+      errorData = await res.json();
+    } catch (parseError) {
+      // אם לא ניתן לפרסר JSON, זה כנראה שגיאת שרת
+      throw new Error(`השרת לא זמין (קוד ${res.status}). אנא ודא שהשרת רץ ונסה שוב.`);
+    }
     throw new Error(errorData.error || `HTTP ${res.status}: Failed to redeem gift card`);
   }
 
-  const data = await res.json();
+  let data;
+  try {
+    data = await res.json();
+  } catch (parseError) {
+    throw new Error('השרת החזיר תגובה לא תקינה. אנא נסה שוב מאוחר יותר.');
+  }
   
   if (!data.ok) {
     throw new Error(data.error || 'Failed to redeem gift card');

@@ -2,22 +2,15 @@
 import { Router, Request, Response } from 'express';
 import pool from '../db.js';
 import { z } from 'zod';
-import rateLimit from 'express-rate-limit';
 import nodemailer, { Transporter } from 'nodemailer';
 import { sanitizeForEmail } from '../security.js';
 import { sendOrderConfirmation } from '../services/whatsapp.js';
 import { asyncHandler } from '../error-handler.js';
+import { addPurchasePoints } from '../models/loyalty.js';
+import { users } from '../db.js';
 
 const router = Router();
 
-// Rate limiter for orders
-const apiLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 20,
-  message: 'יותר מדי בקשות API מ-IP זה, נסה שוב בעוד כמה דקות.',
-  standardHeaders: true,
-  legacyHeaders: false,
-});
 
 // Email transporter
 function createTransporter(): Transporter {
@@ -59,8 +52,12 @@ const orderSchema = z.object({
   paymentData: z.object({
     paymentMethod: z.string().default('bit'),
   }),
-  giftCardCode: z.string().optional(),
-  promoGiftToken: z.string().optional(),
+  giftCardCode: z.union([z.string(), z.null()]).optional(),
+  gift_card_code: z.union([z.string(), z.null()]).optional(),
+  promoGiftToken: z.union([z.string(), z.null()]).optional(),
+  promo_gift_token: z.union([z.string(), z.null()]).optional(),
+  pointsRedeemed: z.number().optional(),
+  points_redeemed: z.number().optional(),
   cart: z.array(z.object({
     id: z.union([z.string(), z.number()]),
     name: z.string(),
@@ -242,7 +239,6 @@ router.get(
 // Create new order (existing code - keep as is)
 router.post(
   '/',
-  apiLimiter,
   asyncHandler(async (req: Request, res: Response) => {
     const validationResult = orderSchema.safeParse(req.body);
     if (!validationResult.success) {
@@ -252,7 +248,24 @@ router.post(
       });
     }
 
-    const { shippingData, paymentData, giftCardCode, promoGiftToken, cart } = validationResult.data;
+    const { shippingData, paymentData, giftCardCode, gift_card_code, promoGiftToken, promo_gift_token, pointsRedeemed, points_redeemed, cart } = validationResult.data;
+    
+    // תמיכה בשני שמות - giftCardCode או gift_card_code
+    const finalGiftCardCode = giftCardCode || gift_card_code;
+    // תמיכה בשני שמות - promoGiftToken או promo_gift_token
+    const finalPromoGiftToken = promoGiftToken || promo_gift_token;
+    // תמיכה בשני שמות - pointsRedeemed או points_redeemed
+    const finalPointsRedeemed = pointsRedeemed || points_redeemed;
+    
+    // ניקוי ונרמול של Gift Card code - trim ו-uppercase
+    const normalizedGiftCardCode = finalGiftCardCode ? String(finalGiftCardCode).trim().toUpperCase() : null;
+
+    console.log(`[Order] Received Gift Card code:`, {
+      original: finalGiftCardCode,
+      normalized: normalizedGiftCardCode,
+      isNull: normalizedGiftCardCode === null,
+      isEmpty: normalizedGiftCardCode === '',
+    });
 
     // Start transaction
     const conn = await pool.getConnection();
@@ -266,33 +279,115 @@ router.post(
       let promoGiftAmount = 0;
 
       // Apply gift card if provided
-      if (giftCardCode) {
+      let giftCardInfo = null;
+      if (normalizedGiftCardCode) {
+        // בודקים Gift Card לפי קוד - רק אם יש יתרה גדולה מ-0 והסטטוס הוא 'active'
+        // חשוב: אם הסטטוס הוא 'used', זה אומר שה-Gift Card שומש עד תומו ולא ניתן להשתמש בו שוב
+        // חשוב: נשתמש ב-normalizedGiftCardCode (trim + uppercase)
         const [giftCards] = await conn.query(
-          'SELECT * FROM gift_cards WHERE code = ? AND status = "active"',
-          [giftCardCode]
+          'SELECT * FROM gift_cards WHERE UPPER(TRIM(code)) = ? AND balance > 0 AND status = "active"',
+          [normalizedGiftCardCode]
         ) as [any[], any];
+
+        console.log(`[Order] Checking Gift Card:`, {
+          normalizedCode: normalizedGiftCardCode,
+          found: giftCards.length > 0,
+          card: giftCards.length > 0 ? {
+            id: giftCards[0].id,
+            code: giftCards[0].code,
+            balance: giftCards[0].balance,
+            status: giftCards[0].status,
+            initial_amount: giftCards[0].initial_amount,
+          } : null,
+        });
+
+        // אם לא נמצא Gift Card פעיל, נבדוק אם הוא קיים אבל שומש עד תומו
+        if (giftCards.length === 0) {
+          const [usedGiftCards] = await conn.query(
+            'SELECT * FROM gift_cards WHERE UPPER(TRIM(code)) = ? AND status = "used"',
+            [normalizedGiftCardCode]
+          ) as [any[], any];
+          
+          if (usedGiftCards.length > 0) {
+            const usedCard = usedGiftCards[0];
+            console.log(`[Order] Gift Card ${normalizedGiftCardCode} is already used (status: used, balance: ${usedCard.balance})`);
+            await conn.rollback();
+            return res.status(400).json({
+              ok: false,
+              error: 'Gift Card זה שומש עד תומו ולא ניתן להשתמש בו שוב',
+            });
+          }
+        }
 
         if (giftCards.length > 0) {
           const giftCard = giftCards[0];
-          const availableAmount = Number(giftCard.remaining_balance || giftCard.amount);
+          // משתמשים ב-balance (לא remaining_balance) לפי המבנה של הטבלה
+          const currentBalance = Number(giftCard.balance) || 0;
+          const availableAmount = currentBalance;
           giftCardAmount = Math.min(availableAmount, cartTotal + shippingFee);
+          
+          console.log(`[Order] Gift Card calculation:`, {
+            code: finalGiftCardCode,
+            currentBalance,
+            cartTotal,
+            shippingFee,
+            availableAmount,
+            giftCardAmount,
+          });
+          
+          // שמירת מידע על Gift Card לפני העדכון (לצורך מייל)
+          const balanceAfter = currentBalance - giftCardAmount;
+          giftCardInfo = {
+            code: normalizedGiftCardCode, // נשתמש ב-normalized code
+            originalCode: giftCard.code, // נשמור גם את הקוד המקורי מהמסד
+            initialAmount: Number(giftCard.initial_amount || giftCard.balance),
+            balanceBefore: currentBalance,
+            amountUsed: giftCardAmount,
+            balanceAfter: balanceAfter,
+            statusBefore: giftCard.status,
+            isFullyUsed: false, // יתעדכן אחר כך
+            statusAfter: 'active', // יתעדכן אחר כך
+          };
+          
+          console.log(`[Order] Gift Card info prepared:`, giftCardInfo);
+        } else {
+          // אם לא נמצא Gift Card פעיל ולא נמצא Gift Card שומש, זה אומר שהוא לא קיים או אין לו יתרה
+          console.log(`[Order] Gift Card ${normalizedGiftCardCode} not found, has no balance, or is not active`);
+          await conn.rollback();
+          return res.status(400).json({
+            ok: false,
+            error: 'Gift Card לא נמצא, אין לו יתרה, או שהוא לא פעיל',
+          });
         }
       }
 
       // Apply promo gift if provided
-      if (promoGiftToken) {
+      let promoGiftInfo = null;
+      if (finalPromoGiftToken) {
         const [promoGifts] = await conn.query(
           'SELECT * FROM promo_gifts WHERE token = ? AND status = "active" AND expires_at > NOW() AND times_used < max_uses',
-          [promoGiftToken]
+          [finalPromoGiftToken]
         ) as [any[], any];
 
         if (promoGifts.length > 0) {
           const promoGift = promoGifts[0];
           promoGiftAmount = Number(promoGift.amount);
+          // שמירת מידע על Promo Gift לפני העדכון (לצורך מייל)
+          promoGiftInfo = {
+            token: finalPromoGiftToken,
+            amount: promoGiftAmount,
+            timesUsedBefore: Number(promoGift.times_used),
+            maxUses: Number(promoGift.max_uses),
+            timesUsedAfter: Number(promoGift.times_used) + 1,
+            remainingUses: Number(promoGift.max_uses) - Number(promoGift.times_used) - 1,
+          };
         }
       }
 
-      const finalTotal = Math.max(0, cartTotal + shippingFee - giftCardAmount - promoGiftAmount);
+      // נקודות מועדון - אם יש
+      const loyaltyPointsAmount = finalPointsRedeemed ? Number(finalPointsRedeemed) : 0;
+      
+      const finalTotal = Math.max(0, cartTotal + shippingFee - giftCardAmount - promoGiftAmount - loyaltyPointsAmount);
 
       // Create order
       const [orderResult] = await conn.query(
@@ -311,7 +406,7 @@ router.post(
           finalTotal,
           paymentData.paymentMethod,
           giftCardAmount,
-          giftCardCode || null,
+          normalizedGiftCardCode || null,
         ]
       ) as [any, any];
 
@@ -336,24 +431,261 @@ router.post(
       }
 
       // Update gift card balance if used
-      if (giftCardCode && giftCardAmount > 0) {
-        await conn.query(
-          `UPDATE gift_cards 
-           SET remaining_balance = remaining_balance - ?,
-               last_used_at = NOW()
-           WHERE code = ?`,
-          [giftCardAmount, giftCardCode]
-        );
+      // חשוב: נעדכן גם אם giftCardInfo הוא null (למקרה של בעיה בחיפוש)
+      if (normalizedGiftCardCode && giftCardAmount > 0) {
+        // אם giftCardInfo הוא null, ננסה למצוא את ה-Gift Card שוב
+        if (!giftCardInfo) {
+          console.log(`[Order ${orderId}] ⚠️ giftCardInfo is null, trying to find Gift Card again...`);
+          const [retryGiftCards] = await conn.query(
+            'SELECT * FROM gift_cards WHERE UPPER(TRIM(code)) = ?',
+            [normalizedGiftCardCode]
+          ) as [any[], any];
+          
+          if (retryGiftCards.length > 0) {
+            const retryGiftCard = retryGiftCards[0];
+            const retryBalance = Number(retryGiftCard.balance) || 0;
+            giftCardInfo = {
+              code: normalizedGiftCardCode,
+              originalCode: retryGiftCard.code,
+              initialAmount: Number(retryGiftCard.initial_amount || retryGiftCard.balance),
+              balanceBefore: retryBalance,
+              amountUsed: giftCardAmount,
+              balanceAfter: retryBalance - giftCardAmount,
+              statusBefore: retryGiftCard.status,
+              isFullyUsed: false,
+              statusAfter: 'active',
+            };
+            console.log(`[Order ${orderId}] Found Gift Card on retry:`, giftCardInfo);
+          } else {
+            console.error(`[Order ${orderId}] ⚠️ Gift Card not found even on retry!`, {
+              normalizedCode: normalizedGiftCardCode,
+            });
+            // נמשיך גם בלי giftCardInfo - ננסה לעדכן לפי הקוד בלבד
+          }
+        }
+        
+        if (giftCardInfo) {
+          // חישוב היתרה החדשה - אם מגיעה ל-0 או פחות, נגדיר ל-0 בדיוק
+          const newBalance = Math.max(0, giftCardInfo.balanceAfter);
+          const isFullyUsed = newBalance === 0;
+        
+          // נשתמש בקוד המקורי מהמסד (giftCardInfo.originalCode) או ב-normalized
+          const codeToUpdate = giftCardInfo.originalCode || normalizedGiftCardCode;
+          
+          console.log(`[Order ${orderId}] Updating Gift Card:`, {
+            normalizedCode: normalizedGiftCardCode,
+            codeToUpdate,
+            balanceBefore: giftCardInfo.balanceBefore,
+            amountUsed: giftCardAmount,
+            balanceAfter: newBalance,
+            isFullyUsed,
+          });
+          
+          // עדכון ה-balance והסטטוס - תמיד נגדיר את הערך המדויק (0 אם שומש עד תומו)
+          // אם היתרה היא 0, הסטטוס חייב להיות 'used'
+          // חשוב: נעדכן גם אם הסטטוס הנוכחי הוא 'used' (למקרה של שימוש חלקי קודם)
+          // נעדכן את הסטטוס במפורש לפי החישוב שלנו
+          const finalStatus = isFullyUsed ? 'used' : 'active';
+          
+          // נעדכן לפי הקוד המקורי מהמסד (case-sensitive) או לפי normalized code
+          // נשתמש ב-UPPER(TRIM()) כדי למצוא את ה-Gift Card גם עם הבדלי case או רווחים
+          const [updateResult] = await conn.query(
+            `UPDATE gift_cards 
+             SET balance = ?,
+                 status = ?,
+                 order_id = ?
+             WHERE UPPER(TRIM(code)) = ?`,
+            [newBalance, finalStatus, orderId, normalizedGiftCardCode]
+          ) as [any, any];
+          
+          console.log(`[Order ${orderId}] Gift Card update result:`, {
+            affectedRows: updateResult.affectedRows,
+            codeToUpdate,
+            normalizedCode: normalizedGiftCardCode,
+            newBalance,
+            finalStatus,
+            isFullyUsed,
+          });
+          
+          if (updateResult.affectedRows === 0) {
+            console.error(`[Order ${orderId}] ⚠️ Gift Card update failed - no rows affected!`, {
+              codeToUpdate,
+              normalizedCode: normalizedGiftCardCode,
+              newBalance,
+              finalStatus,
+            });
+            
+            // ניסיון נוסף עם הקוד המקורי מהמסד
+            console.log(`[Order ${orderId}] Retrying with original code from DB...`);
+            const [retryUpdateResult] = await conn.query(
+              `UPDATE gift_cards 
+               SET balance = ?,
+                   status = ?,
+                   order_id = ?
+               WHERE code = ?`,
+              [newBalance, finalStatus, orderId, codeToUpdate]
+            ) as [any, any];
+            
+            console.log(`[Order ${orderId}] Retry update result:`, {
+              affectedRows: retryUpdateResult.affectedRows,
+              codeUsed: codeToUpdate,
+            });
+            
+            // אם גם זה לא עבד, ננסה עם LIKE
+            if (retryUpdateResult.affectedRows === 0) {
+              console.log(`[Order ${orderId}] Retrying with LIKE pattern...`);
+              const [likeUpdateResult] = await conn.query(
+                `UPDATE gift_cards 
+                 SET balance = ?,
+                     status = ?,
+                     order_id = ?
+                 WHERE UPPER(TRIM(code)) LIKE ?`,
+                [newBalance, finalStatus, orderId, `%${normalizedGiftCardCode}%`]
+              ) as [any, any];
+              
+              console.log(`[Order ${orderId}] LIKE update result:`, {
+                affectedRows: likeUpdateResult.affectedRows,
+              });
+            }
+          }
+          
+          // וידוא שהעדכון בוצע - בדיקה נוספת
+          const [verifyResult] = await conn.query(
+            'SELECT balance, status FROM gift_cards WHERE code = ? OR UPPER(TRIM(code)) = ?',
+            [codeToUpdate, normalizedGiftCardCode]
+          ) as [any[], any];
+          
+          if (verifyResult.length > 0) {
+            const actualBalance = Number(verifyResult[0].balance) || 0;
+            const actualStatus = verifyResult[0].status;
+            
+            console.log(`[Order ${orderId}] Gift Card after update:`, {
+              codeToUpdate,
+              normalizedCode: normalizedGiftCardCode,
+              expectedBalance: newBalance,
+              actualBalance,
+              expectedStatus: isFullyUsed ? 'used' : 'active',
+              actualStatus,
+              match: actualBalance === newBalance && actualStatus === (isFullyUsed ? 'used' : 'active'),
+            });
+            
+            // אם העדכון לא התבצע נכון, ננסה שוב
+            if (actualBalance !== newBalance || actualStatus !== (isFullyUsed ? 'used' : 'active')) {
+              console.error(`[Order ${orderId}] ⚠️ Gift Card update mismatch! Retrying...`, {
+                codeToUpdate,
+                normalizedCode: normalizedGiftCardCode,
+                expected: { balance: newBalance, status: isFullyUsed ? 'used' : 'active' },
+                actual: { balance: actualBalance, status: actualStatus },
+              });
+              
+              // ניסיון שני לעדכן - ננסה גם עם הקוד המקורי וגם עם normalized
+              await conn.query(
+                `UPDATE gift_cards 
+                 SET balance = ?,
+                     status = ?,
+                     order_id = ?
+                 WHERE code = ? OR UPPER(TRIM(code)) = ?`,
+                [newBalance, isFullyUsed ? 'used' : 'active', orderId, codeToUpdate, normalizedGiftCardCode]
+              );
+              
+              // בדיקה נוספת
+              const [retryResult] = await conn.query(
+                'SELECT balance, status FROM gift_cards WHERE code = ? OR UPPER(TRIM(code)) = ?',
+                [codeToUpdate, normalizedGiftCardCode]
+              ) as [any[], any];
+              
+              if (retryResult.length > 0) {
+                console.log(`[Order ${orderId}] Gift Card after retry:`, {
+                  codeToUpdate,
+                  normalizedCode: normalizedGiftCardCode,
+                  balance: retryResult[0].balance,
+                  status: retryResult[0].status,
+                });
+              }
+            }
+          } else {
+            console.error(`[Order ${orderId}] ⚠️ Gift Card not found after update!`, {
+              codeToUpdate,
+              normalizedCode: normalizedGiftCardCode,
+            });
+          }
+          
+          // עדכון giftCardInfo עם הערך הסופי המדויק
+          giftCardInfo.balanceAfter = newBalance;
+          giftCardInfo.isFullyUsed = isFullyUsed;
+          giftCardInfo.statusAfter = isFullyUsed ? 'used' : 'active';
+        } else {
+          // אם giftCardInfo עדיין null, ננסה לעדכן לפי הקוד בלבד
+          console.log(`[Order ${orderId}] ⚠️ Updating Gift Card without giftCardInfo, using code only...`);
+          const [fallbackGiftCards] = await conn.query(
+            'SELECT balance FROM gift_cards WHERE UPPER(TRIM(code)) = ?',
+            [normalizedGiftCardCode]
+          ) as [any[], any];
+          
+          if (fallbackGiftCards.length > 0) {
+            const currentBalance = Number(fallbackGiftCards[0].balance) || 0;
+            const newBalance = Math.max(0, currentBalance - giftCardAmount);
+            const isFullyUsed = newBalance === 0;
+            const finalStatus = isFullyUsed ? 'used' : 'active';
+            
+            const [fallbackUpdateResult] = await conn.query(
+              `UPDATE gift_cards 
+               SET balance = ?,
+                   status = ?,
+                   order_id = ?
+               WHERE UPPER(TRIM(code)) = ?`,
+              [newBalance, finalStatus, orderId, normalizedGiftCardCode]
+            ) as [any, any];
+            
+            console.log(`[Order ${orderId}] Fallback Gift Card update result:`, {
+              affectedRows: fallbackUpdateResult.affectedRows,
+              newBalance,
+              finalStatus,
+            });
+          } else {
+            console.log(`[Order ${orderId}] Gift Card update skipped:`, {
+              normalizedGiftCardCode: !!normalizedGiftCardCode,
+              originalGiftCardCode: finalGiftCardCode,
+              giftCardAmount,
+              giftCardInfo: !!giftCardInfo,
+            });
+          }
+        }
+      } else {
+        console.log(`[Order ${orderId}] Gift Card update skipped:`, {
+          normalizedGiftCardCode: !!normalizedGiftCardCode,
+          originalGiftCardCode: finalGiftCardCode,
+          giftCardAmount,
+          giftCardInfo: !!giftCardInfo,
+        });
       }
 
       // Update promo gift usage if used
-      if (promoGiftToken && promoGiftAmount > 0) {
+      if (finalPromoGiftToken && promoGiftAmount > 0) {
+        // עדכון ה-times_used ובדיקה אם הגענו למקסימום שימושים
         await conn.query(
           `UPDATE promo_gifts 
-           SET times_used = times_used + 1
+           SET times_used = times_used + 1,
+               status = CASE 
+                 WHEN (times_used + 1) >= max_uses THEN 'disabled'
+                 ELSE status
+               END
            WHERE token = ?`,
-          [promoGiftToken]
+          [finalPromoGiftToken]
         );
+        
+        // בדיקה נוספת - אם הגענו למקסימום שימושים, נעדכן את הסטטוס ל-'disabled'
+        const [checkResult] = await conn.query(
+          `SELECT times_used, max_uses FROM promo_gifts WHERE token = ?`,
+          [finalPromoGiftToken]
+        ) as [any[], any];
+        
+        if (checkResult.length > 0 && Number(checkResult[0].times_used) >= Number(checkResult[0].max_uses)) {
+          await conn.query(
+            `UPDATE promo_gifts SET status = 'disabled' WHERE token = ?`,
+            [finalPromoGiftToken]
+          );
+        }
       }
 
       await conn.commit();
@@ -375,6 +707,88 @@ router.post(
         )
         .join('');
 
+      // בניית פירוט ההנחות
+      const discountsHtml = [];
+      let totalDiscounts = 0;
+      
+      if (giftCardAmount > 0) {
+        // אם יש giftCardInfo, נציג פרטים מלאים, אחרת רק את הסכום
+        if (giftCardInfo) {
+          const finalBalance = giftCardInfo.balanceAfter || 0;
+          const balanceDisplay = finalBalance === 0 
+            ? '₪0.00 (שומש עד תומו)' 
+            : `₪${finalBalance.toFixed(2)}`;
+          
+          discountsHtml.push(`
+            <tr>
+              <td style="padding: 10px; border-bottom: 1px solid #ddd; color: #333;">
+                <strong style="color: #10b981;">🎁 מימוש Gift Card</strong><br>
+                <span style="font-size: 13px; color: #666;">קוד: <strong>${giftCardInfo.code}</strong></span><br>
+                <span style="font-size: 12px; color: #999; margin-top: 4px; display: block;">
+                  יתרה לפני שימוש: ₪${giftCardInfo.balanceBefore.toFixed(2)} | 
+                  שומש בהזמנה זו: ₪${giftCardInfo.amountUsed.toFixed(2)} | 
+                  יתרה נשארת: ${balanceDisplay}
+                </span>
+              </td>
+              <td style="padding: 10px; border-bottom: 1px solid #ddd; text-align: left; color: #10b981; font-weight: bold; font-size: 16px;">-₪${giftCardAmount.toFixed(2)}</td>
+            </tr>
+          `);
+        } else {
+          // אם אין giftCardInfo אבל יש giftCardAmount, נציג רק את הסכום
+          discountsHtml.push(`
+            <tr>
+              <td style="padding: 10px; border-bottom: 1px solid #ddd; color: #333;">
+                <strong style="color: #10b981;">🎁 מימוש Gift Card</strong>
+                ${normalizedGiftCardCode ? `<br><span style="font-size: 13px; color: #666;">קוד: <strong>${normalizedGiftCardCode}</strong></span>` : ''}
+              </td>
+              <td style="padding: 10px; border-bottom: 1px solid #ddd; text-align: left; color: #10b981; font-weight: bold; font-size: 16px;">-₪${giftCardAmount.toFixed(2)}</td>
+            </tr>
+          `);
+        }
+        totalDiscounts += giftCardAmount;
+      }
+      
+      if (promoGiftAmount > 0) {
+        if (promoGiftInfo) {
+          discountsHtml.push(`
+            <tr>
+              <td style="padding: 10px; border-bottom: 1px solid #ddd; color: #333;">
+                <strong style="color: #10b981;">🎟️ מימוש Promo Gift / קוד מבצע</strong><br>
+                <span style="font-size: 13px; color: #666;">קוד: <strong>${promoGiftInfo.token}</strong></span><br>
+                <span style="font-size: 12px; color: #999; margin-top: 4px; display: block;">
+                  שימושים: ${promoGiftInfo.timesUsedBefore + 1}/${promoGiftInfo.maxUses} | 
+                  שימושים נשארים: ${Math.max(0, promoGiftInfo.remainingUses)}
+                </span>
+              </td>
+              <td style="padding: 10px; border-bottom: 1px solid #ddd; text-align: left; color: #10b981; font-weight: bold; font-size: 16px;">-₪${promoGiftAmount.toFixed(2)}</td>
+            </tr>
+          `);
+        } else {
+          discountsHtml.push(`
+            <tr>
+              <td style="padding: 10px; border-bottom: 1px solid #ddd; color: #333;">
+                <strong style="color: #10b981;">🎟️ מימוש Promo Gift / קוד מבצע</strong>
+                ${finalPromoGiftToken ? `<br><span style="font-size: 13px; color: #666;">קוד: <strong>${finalPromoGiftToken}</strong></span>` : ''}
+              </td>
+              <td style="padding: 10px; border-bottom: 1px solid #ddd; text-align: left; color: #10b981; font-weight: bold; font-size: 16px;">-₪${promoGiftAmount.toFixed(2)}</td>
+            </tr>
+          `);
+        }
+        totalDiscounts += promoGiftAmount;
+      }
+      
+      if (loyaltyPointsAmount > 0) {
+        discountsHtml.push(`
+          <tr>
+            <td style="padding: 10px; border-bottom: 1px solid #ddd; color: #333;">
+              <strong style="color: #10b981;">⭐ מימוש נקודות מועדון לקוחות</strong>
+            </td>
+            <td style="padding: 10px; border-bottom: 1px solid #ddd; text-align: left; color: #10b981; font-weight: bold; font-size: 16px;">-₪${loyaltyPointsAmount.toFixed(2)}</td>
+          </tr>
+        `);
+        totalDiscounts += loyaltyPointsAmount;
+      }
+
       const emailHtml = `
         <div style="font-family: Arial, sans-serif; text-align: right; direction: rtl; padding: 20px; background-color: #f9fafb;">
           <div style="max-width: 600px; margin: 0 auto; background-color: white; border-radius: 8px; padding: 30px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
@@ -385,19 +799,76 @@ router.post(
             <p style="color: #666; font-size: 16px; line-height: 1.6; margin-bottom: 20px;">
               ההזמנה שלך התקבלה בהצלחה! מספר הזמנה: <strong>#${orderId}</strong>
             </p>
+            
             <div style="background-color: #f9fafb; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
               <h3 style="color: #333; font-size: 18px; margin-bottom: 15px;">פרטי ההזמנה:</h3>
               <table style="width: 100%; border-collapse: collapse;">
                 ${orderItemsHtml}
                 <tr>
-                  <td style="padding: 10px; border-top: 2px solid #333; font-weight: bold;">
-                    סה"כ: ₪${finalTotal.toFixed(2)}
+                  <td style="padding: 10px; border-top: 2px solid #ddd; font-weight: bold; color: #666;">סה"כ מוצרים:</td>
+                  <td style="padding: 10px; border-top: 2px solid #ddd; text-align: left; font-weight: bold;">₪${(cartTotal).toFixed(2)}</td>
+                </tr>
+                ${shippingFee > 0 ? `
+                <tr>
+                  <td style="padding: 8px; color: #666;">דמי משלוח:</td>
+                  <td style="padding: 8px; text-align: left;">₪${shippingFee.toFixed(2)}</td>
+                </tr>
+                ` : `
+                <tr>
+                  <td style="padding: 8px; color: #10b981; font-weight: bold;">דמי משלוח:</td>
+                  <td style="padding: 8px; text-align: left; color: #10b981; font-weight: bold;">חינם</td>
+                </tr>
+                `}
+                ${discountsHtml.length > 0 ? `
+                <tr>
+                  <td colspan="2" style="padding: 15px 0 10px 0; border-top: 2px solid #ddd;">
+                    <h4 style="color: #333; font-size: 16px; font-weight: bold; margin: 0;">💰 הנחות וקיזוזים:</h4>
+                  </td>
+                </tr>
+                ${discountsHtml.join('')}
+                <tr>
+                  <td style="padding: 10px; background-color: #f0fdf4; color: #333; font-weight: bold; font-size: 15px;">סה"כ הנחות וקיזוזים:</td>
+                  <td style="padding: 10px; background-color: #f0fdf4; text-align: left; color: #10b981; font-weight: bold; font-size: 16px;">-₪${totalDiscounts.toFixed(2)}</td>
+                </tr>
+                ` : ''}
+                <tr>
+                  <td colspan="2" style="padding: 5px 0;"></td>
+                </tr>
+                <tr>
+                  <td style="padding: 15px; border-top: 3px solid #333; background-color: #fef3c7; font-weight: bold; font-size: 18px; color: #92400e;">💳 סכום לתשלום בביט:</td>
+                  <td style="padding: 15px; border-top: 3px solid #333; background-color: #fef3c7; text-align: left; font-weight: bold; font-size: 22px; color: #92400e;">₪${finalTotal.toFixed(2)}</td>
+                </tr>
+                <tr>
+                  <td colspan="2" style="padding: 8px 0; border-top: 1px solid #ddd;">
+                    <div style="font-size: 12px; color: #666; line-height: 1.6;">
+                      <strong>פירוט החישוב:</strong><br>
+                      סה"כ מוצרים: ₪${cartTotal.toFixed(2)} + 
+                      משלוח: ${shippingFee > 0 ? `₪${shippingFee.toFixed(2)}` : 'חינם'}${totalDiscounts > 0 ? ` - הנחות: ₪${totalDiscounts.toFixed(2)}` : ''} = 
+                      <strong style="color: #92400e;">₪${finalTotal.toFixed(2)}</strong>
+                    </div>
                   </td>
                 </tr>
               </table>
             </div>
+            
+            <div style="background-color: #fef3c7; border-right: 4px solid #f59e0b; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
+              <h3 style="color: #92400e; font-size: 18px; margin-bottom: 10px; font-weight: bold;">⚠️ חשוב מאוד - השלמת התשלום:</h3>
+              <p style="color: #78350f; font-size: 16px; line-height: 1.8; margin-bottom: 10px;">
+                ההזמנה תאושר רק לאחר העברת התשלום בביט למספר: <strong style="font-size: 18px;">054-6998603</strong>
+              </p>
+              <p style="color: #78350f; font-size: 16px; line-height: 1.8; margin-bottom: 10px;">
+                אנא העבר את הסכום <strong>₪${finalTotal.toFixed(2)}</strong> לביט למספר הנ"ל ושלח צילום מסך של ההעברה לווטסאפ למספר: <strong style="font-size: 18px;">054-6998603</strong>
+              </p>
+              <p style="color: #78350f; font-size: 14px; line-height: 1.6; margin-top: 15px;">
+                <strong>מספר הזמנה להזכרה:</strong> #${orderId}
+              </p>
+            </div>
+            
             <p style="color: #666; font-size: 14px; line-height: 1.6;">
-              נחזור אליך בהקדם עם פרטי המשלוח.
+              לאחר קבלת התשלום נחזור אליך בהקדם עם פרטי המשלוח.
+            </p>
+            <p style="color: #666; font-size: 14px; line-height: 1.6; margin-top: 10px;">
+              תודה על רכישתך ב-LUXCERA! 🕯️
             </p>
           </div>
         </div>
@@ -412,14 +883,30 @@ router.post(
 
       // Send WhatsApp notification if configured
       try {
-        await sendOrderConfirmation({
-          phone: shippingData.phone,
+        await sendOrderConfirmation(
+          shippingData.fullName,
+          shippingData.phone,
           orderId,
-          fullName: shippingData.fullName,
-        });
+          finalTotal
+        );
       } catch (whatsappError) {
         console.error('WhatsApp notification failed:', whatsappError);
         // Don't fail the order if WhatsApp fails
+      }
+
+      // Add loyalty points if user is a club member
+      try {
+        const user = await users.findByEmail(shippingData.email);
+        if (user) {
+          await addPurchasePoints({
+            userId: user.id,
+            orderId,
+            amount: finalTotal,
+          });
+        }
+      } catch (loyaltyError) {
+        console.error('Loyalty points update failed:', loyaltyError);
+        // Don't fail the order if loyalty points update fails
       }
 
       res.json({

@@ -209,9 +209,22 @@ router.post(
 
       await conn.commit();
 
+      // נביא את המידע המעודכן
+      const [updatedRows] = await conn.query(
+        'SELECT times_used, max_uses, status FROM promo_gifts WHERE id = ?',
+        [promo.id]
+      ) as [any[], any];
+      
+      const updatedPromo = updatedRows[0];
+      const remainingUses = updatedPromo.max_uses - updatedPromo.times_used;
+
       return res.json({
         ok: true,
         applied: amountToApply,
+        times_used: updatedPromo.times_used,
+        max_uses: updatedPromo.max_uses,
+        remainingUses: Math.max(0, remainingUses),
+        status: updatedPromo.status,
         // אין כאן balance כי זה לא gift card
       });
     } catch (err: any) {

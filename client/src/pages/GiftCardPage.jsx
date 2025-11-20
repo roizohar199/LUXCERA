@@ -18,6 +18,11 @@ function GiftCardPage() {
     }
   }, []);
 
+  // Scroll to top כשנכנסים לדף Gift Card
+  React.useEffect(() => {
+    window.scrollTo({ top: 0, behavior: 'instant' });
+  }, []);
+
   const handleUserClick = () => navigate('/');
   const handleSearchClick = () => navigate('/');
 

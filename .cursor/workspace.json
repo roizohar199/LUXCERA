@@ -1,0 +1,104 @@
+{
+    "$schema": "https://www.cursor.com/schemas/workspace.json",
+    "projectInfo": {
+      "title": "LUXCERA – Candle Store Platform",
+      "description": "LUXCERA הוא פרויקט מסחר אלקטרוני מלא למכירת נרות שעווה, מארזי מתנה ומוצרי עיצוב. המערכת כוללת צד לקוח (React+Vite), צד שרת (Express+Node), בסיס נתונים MySQL, אינטגרציות WhatsApp ותשלום חיצוני (Bit/ZCredit), הפעלה ב-PM2 והגשה ב-Nginx.",
+      "techStack": [
+        "React",
+        "Vite",
+        "Node.js",
+        "Express",
+        "MySQL",
+        "PM2",
+        "Nginx",
+        "WhatsApp API",
+        "External Payment Redirect"
+      ]
+    },
+  
+    "rules": [
+      {
+        "scope": "project",
+        "content": "## LUXCERA – ARCHITECTURE\n- Mono-repo: root/, client/ (React+Vite), server/ (Express).\n- אין לשנות מבנה תיקיות.\n- תמיד להחזיר קבצים מלאים עם imports.\n\n## BACKEND – Express\n- ENV נטען מ-/server/.env.\n- אין לחשוף מפתחות (Bit, WhatsApp, MySQL).\n- כל Route עטוף try/catch ומחזיר JSON צורה אחידה.\n- שימוש ב-connection pool ו-prepared statements.\n\n## FRONTEND – React/Vite\n- קומפוננטות פונקציונליות בלבד.\n- שימוש ב-state הקיים.\n- API דרך axios/fetch ל-/api.\n\n## CART STRUCTURE\n{id, name, price, originalPrice, salePrice, quantity, inStock}\n- אסור לשנות שמות שדות.\n\n## CHECKOUT FLOW\n- POST /api/orders → שמירת הזמנה ב-MySQL → החזרת URL לסליקה חיצונית → Redirect מהלקוח.\n\n## WhatsApp API\n- שימוש ב-SMS_SERVICE=whatsapp + WHATSAPP_API_KEY.\n\n## DEVOPS\n- PM2: luxcera-server.\n- Build: client/dist.\n- Nginx: הגשה סטטית + proxy_pass ל-Node.\n\n## DEPLOY\n- git pull → npm install → build → pm2 restart.\n\n## STYLE\n- קוד מלא בלבד, לא חלקי. כל קובץ מוחלף כיחידה שלמה."
+      }
+    ],
+  
+    "commands": [
+      {
+        "name": "client-install",
+        "command": "npm install --prefix client"
+      },
+      {
+        "name": "client-dev",
+        "command": "npm run dev --prefix client"
+      },
+      {
+        "name": "client-build",
+        "command": "npm run build --prefix client"
+      },
+      {
+        "name": "server-install",
+        "command": "npm install --prefix server"
+      },
+      {
+        "name": "server-dev",
+        "command": "npm run dev --prefix server"
+      },
+      {
+        "name": "pm2-restart",
+        "command": "pm2 restart luxcera-server"
+      },
+      {
+        "name": "pm2-logs",
+        "command": "pm2 logs luxcera-server --lines 50"
+      },
+      {
+        "name": "mysql-login",
+        "command": "mysql -u root -p"
+      },
+      {
+        "name": "deploy-vps",
+        "command": "ssh root@YOUR_SERVER_IP \"cd /var/www/luxcera && git pull && npm install --prefix server && npm install --prefix client && npm run build --prefix client && pm2 restart luxcera-server\""
+      },
+      {
+        "name": "nginx-reload",
+        "command": "sudo systemctl reload nginx"
+      }
+    ],
+  
+    "userCommands": [
+      {
+        "name": "fix-backend-error",
+        "content": "מצא את הבעיה בקוד בצד השרת, החזר קובץ מלא מתוקן כולל imports, try/catch ו-JSON אחיד + curl לבדיקה."
+      },
+      {
+        "name": "add-api-endpoint",
+        "content": "צור Route מלא (router/controller) עם MySQL + ולידציה + curl לדוגמה."
+      },
+      {
+        "name": "implement-checkout",
+        "content": "הוסף לוגיקת checkout מלאה לצד לקוח וצד שרת לפי מבנה cart הקבוע."
+      },
+      {
+        "name": "update-react-component",
+        "content": "החזר קובץ קומפוננטה מלא כולל imports/state/effects."
+      },
+      {
+        "name": "debug-mysql",
+        "content": "אתר בעיות SQL, תקן את השאילתה והחזר קובץ שרת מלא + SQL מתוקן."
+      },
+      {
+        "name": "pm2-fix",
+        "content": "בדוק בעיות PM2, תקן את הקוד במידת הצורך והחזר קובץ מלא."
+      },
+      {
+        "name": "nginx-config",
+        "content": "ספק server block מלא כולל SSL והסבר איפה להציב אותו."
+      },
+      {
+        "name": "whatsapp-integration",
+        "content": "הוסף/תקן Route מלא לשליחת הודעת WhatsApp דרך ה-API."
+      }
+    ]
+  }
+  

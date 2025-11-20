@@ -57,11 +57,36 @@ function PromoGiftApply({ orderTotal, onApply }) {
 
     try {
       // קודם בודקים שזה קיים
-      const checkRes = await fetch(getApiUrl(`/api/promo-gifts/${code.trim()}`));
-      const checkData = await checkRes.json();
+      let checkRes;
+      try {
+        checkRes = await fetch(getApiUrl(`/api/promo-gifts/${code.trim()}`));
+      } catch (networkError) {
+        if (networkError.name === 'TypeError' || networkError.message.includes('fetch') || networkError.message.includes('ECONNREFUSED')) {
+          setMsg('⚠️ השרת לא זמין כרגע. אנא ודא שהשרת רץ ונסה שוב.');
+          setMsgType('error');
+          setLoading(false);
+          return;
+        }
+        throw networkError;
+      }
+
+      let checkData;
+      try {
+        checkData = await checkRes.json();
+      } catch (parseError) {
+        setMsg('השרת החזיר תגובה לא תקינה. אנא נסה שוב מאוחר יותר.');
+        setMsgType('error');
+        setLoading(false);
+        return;
+      }
 
       if (!checkRes.ok || !checkData.ok) {
-        setMsg(checkData.error || 'קוד לא תקף');
+        const errorMsg = checkData.error || 'קוד לא תקף';
+        if (errorMsg.includes('לא זמין') || errorMsg.includes('ECONNREFUSED') || errorMsg.includes('proxy')) {
+          setMsg('⚠️ השרת לא זמין כרגע. אנא ודא שהשרת רץ ונסה שוב.');
+        } else {
+          setMsg(errorMsg);
+        }
         setMsgType('error');
         setLoading(false);
         return;
@@ -76,24 +101,76 @@ function PromoGiftApply({ orderTotal, onApply }) {
         return;
       }
 
-      const res = await fetch(getApiUrl(`/api/promo-gifts/${code.trim()}/redeem`), {
-        method: 'POST',
-        credentials: 'include',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-CSRF-Token': csrfToken,
-        },
-        body: JSON.stringify({ orderTotal }),
-      });
+      let res;
+      try {
+        res = await fetch(getApiUrl(`/api/promo-gifts/${code.trim()}/redeem`), {
+          method: 'POST',
+          credentials: 'include',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-CSRF-Token': csrfToken,
+          },
+          body: JSON.stringify({ orderTotal }),
+        });
+      } catch (networkError) {
+        if (networkError.name === 'TypeError' || networkError.message.includes('fetch') || networkError.message.includes('ECONNREFUSED')) {
+          setMsg('⚠️ השרת לא זמין כרגע. אנא ודא שהשרת רץ ונסה שוב.');
+          setMsgType('error');
+          setLoading(false);
+          return;
+        }
+        throw networkError;
+      }
 
-      const data = await res.json();
+      if (!res.ok) {
+        // טיפול בשגיאות שרת
+        let errorMsg = 'לא ניתן לממש';
+        try {
+          const errorData = await res.json();
+          errorMsg = errorData.error || `השרת לא זמין (קוד ${res.status})`;
+        } catch (parseError) {
+          errorMsg = `השרת לא זמין (קוד ${res.status}). אנא ודא שהשרת רץ ונסה שוב.`;
+        }
+        if (errorMsg.includes('לא זמין') || errorMsg.includes('ECONNREFUSED') || errorMsg.includes('proxy')) {
+          setMsg('⚠️ השרת לא זמין כרגע. אנא ודא שהשרת רץ ונסה שוב.');
+        } else {
+          setMsg(errorMsg);
+        }
+        setMsgType('error');
+        setLoading(false);
+        return;
+      }
 
-      if (!res.ok || !data.ok) {
-        setMsg(data.error || 'לא ניתן לממש');
+      let data;
+      try {
+        data = await res.json();
+      } catch (parseError) {
+        setMsg('השרת החזיר תגובה לא תקינה. אנא נסה שוב מאוחר יותר.');
+        setMsgType('error');
+        setLoading(false);
+        return;
+      }
+
+      if (!data.ok) {
+        const errorMsg = data.error || 'לא ניתן לממש';
+        // זיהוי שגיאות רשת
+        if (errorMsg.includes('לא זמין') || errorMsg.includes('ECONNREFUSED') || errorMsg.includes('proxy')) {
+          setMsg('⚠️ השרת לא זמין כרגע. אנא ודא שהשרת רץ ונסה שוב.');
+        } else {
+          setMsg(errorMsg);
+        }
         setMsgType('error');
       } else {
-        onApply?.(data.applied);
-        setMsg(`קיבלת הנחה של ₪${data.applied.toFixed(2)}`);
+        // שולח גם את הסכום וגם את ה-token
+        onApply?.(data.applied, code.trim());
+        
+        // הודעה מותאמת לפי מספר השימושים הנשארים
+        const remainingUses = data.remainingUses !== undefined ? data.remainingUses : (data.max_uses - data.times_used);
+        if (remainingUses === 0 || data.status === 'disabled') {
+          setMsg(`קיבלת הנחה של ₪${data.applied.toFixed(2)} | ⚠️ קוד זה שומש עד תומו ואין אפשרות להשתמש בו שוב`);
+        } else {
+          setMsg(`קיבלת הנחה של ₪${data.applied.toFixed(2)}${remainingUses !== undefined ? ` | שימושים נשארים: ${remainingUses}` : ''}`);
+        }
         setMsgType('success');
         // Clear code on success
         setCode('');

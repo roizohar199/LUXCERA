@@ -70,11 +70,13 @@ export default function GiftCardEntryButton({ onShowPurchase }) {
           
           {/* טקסט GIFT CARD */}
           <h2 
-            className="text-3xl font-bold text-gold mb-6" 
+            className="text-3xl font-bold mb-6" 
             style={{ 
               fontFamily: 'sans-serif', 
               letterSpacing: '0.2em',
-              fontWeight: 700
+              fontWeight: 700,
+              color: '#D4AF37',
+              textShadow: '3px 3px 0px rgba(0, 0, 0, 0.3), 6px 6px 10px rgba(0, 0, 0, 0.2), 0 0 20px rgba(212, 175, 55, 0.5)'
             }}
           >
             GIFT CARD

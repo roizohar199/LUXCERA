@@ -19,7 +19,10 @@ import productsRoutes from './routes/products.js';
 import ordersRoutes from './routes/orders.js';
 import giftCardRoutes from './routes/giftcards.js';
 import promoGiftRoutes from './routes/promoGifts.js';
+import usersRoutes from './routes/users.js';
 import cartRoutes from './routes/cart.js';
+import bannersRoutes from './routes/banners.js';
+import clubRoutes from './routes/club.js';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
@@ -48,12 +51,12 @@ app.use(
         defaultSrc: ["'self'"],
         styleSrc: ["'self'", "'unsafe-inline'"],
         scriptSrc: ["'self'"],
-        imgSrc: ["'self'", 'data:', 'https:'],
+        imgSrc: ["'self'", 'data:', 'https:', `${API_PUBLIC}/uploads`, `${ORIGIN}/uploads`],
         // אם הלקוח ניגש יחסית (/api/...) זה 'self'; אם ניגש ישירות ל-8787, הוספנו את API_PUBLIC
         connectSrc: ["'self'", ORIGIN, API_PUBLIC],
         fontSrc: ["'self'"],
         objectSrc: ["'none'"],
-        mediaSrc: ["'self'"],
+        mediaSrc: ["'self'", `${API_PUBLIC}/uploads`, `${ORIGIN}/uploads`],
         frameSrc: ["'none'"],
       },
     },
@@ -66,28 +69,40 @@ app.use(
 const generalLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 100,
-  message: 'יותר מדי בקשות מ-IP זה, נסה שוב בעוד כמה דקות.',
+  message: { ok: false, error: 'יותר מדי בקשות מ-IP זה, נסה שוב בעוד כמה דקות.' },
   standardHeaders: true,
   legacyHeaders: false,
+  handler: (req, res) => {
+    res.status(429).json({ ok: false, error: 'יותר מדי בקשות מ-IP זה, נסה שוב בעוד כמה דקות.' });
+  },
 });
 
-const apiLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 20,
-  message: 'יותר מדי בקשות API מ-IP זה, נסה שוב בעוד כמה דקות.',
-  standardHeaders: true,
-  legacyHeaders: false,
-});
 
 const registerLimiter = rateLimit({
   windowMs: 60 * 60 * 1000,
   max: 5,
-  message: 'יותר מדי ניסיונות הרשמה מ-IP זה, נסה שוב בעוד שעה.',
+  message: { ok: false, error: 'יותר מדי ניסיונות הרשמה מ-IP זה, נסה שוב בעוד שעה.' },
   standardHeaders: true,
   legacyHeaders: false,
+  handler: (req, res) => {
+    res.status(429).json({ ok: false, error: 'יותר מדי ניסיונות הרשמה מ-IP זה, נסה שוב בעוד שעה.' });
+  },
 });
 
-app.use(generalLimiter);
+// Login limiter - יותר סלחני בפיתוח
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 דקות
+  max: process.env.NODE_ENV === 'production' ? 10 : 100, // 100 בפיתוח, 10 בפרודקשן
+  message: { ok: false, error: 'יותר מדי ניסיונות התחברות מ-IP זה, נסה שוב בעוד כמה דקות.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: (req, res) => {
+    res.status(429).json({ ok: false, error: 'יותר מדי ניסיונות התחברות מ-IP זה, נסה שוב בעוד כמה דקות.' });
+  },
+});
+
+// Rate limiting removed - was causing 429 errors on public endpoints
+// app.use(generalLimiter);
 
 // 3) CORS – חשוב לאפשר credentials והכותרת של ה-CSRF
 app.use(
@@ -187,7 +202,7 @@ app.get('/api/csrf', csrfProtection, (req: Request, res: Response) => {
 });
 
 // צור קשר / הזמנה – עם CSRF protection
-app.post('/api/contact', csrfProtection, apiLimiter, async (req: Request, res: Response) => {
+app.post('/api/contact', csrfProtection, async (req: Request, res: Response) => {
   try {
     const parsed = ContactSchema.safeParse(req.body);
     if (!parsed.success) {
@@ -236,7 +251,7 @@ app.post('/api/contact', csrfProtection, apiLimiter, async (req: Request, res: R
 });
 
 // יצירה מותאמת אישית – עם CSRF protection
-app.post('/api/custom-creation', csrfProtection, apiLimiter, async (req: Request, res: Response) => {
+app.post('/api/custom-creation', csrfProtection, async (req: Request, res: Response) => {
   try {
     const parsed = CustomCreationSchema.safeParse(req.body);
     if (!parsed.success) {
@@ -289,7 +304,7 @@ app.post('/api/custom-creation', csrfProtection, apiLimiter, async (req: Request
 });
 
 // התחברות עם Google – בודק אם המשתמש רשום
-app.post('/api/login-google', csrfProtection, apiLimiter, async (req: Request, res: Response) => {
+app.post('/api/login-google', csrfProtection, async (req: Request, res: Response) => {
   try {
     const parsed = RegisterSchema.safeParse(req.body);
     if (!parsed.success) {
@@ -410,11 +425,14 @@ app.post('/api/register', csrfProtection, registerLimiter, async (req: Request, 
 app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 
 // ---------- NEW CMS ROUTES ----------
-// Authentication routes (no CSRF for login)
+// Authentication routes (no CSRF for login, but with login-specific rate limiting)
+app.use('/api/auth/login', loginLimiter);
 app.use('/api/auth', authRoutes);
 
 // Public products routes
 app.use('/api/public/products', productsRoutes);
+// Public banners routes
+app.use('/api/public/banners', bannersRoutes);
 
 // Orders routes
 app.use('/api/orders', ordersRoutes);
@@ -422,10 +440,15 @@ app.use('/api/orders', ordersRoutes);
 // Cart routes (for logged-in users)
 app.use('/api/cart', cartRoutes);
 
+// Loyalty Club routes
+app.use('/api/club', clubRoutes);
+
 // גיפט קארד – חלק עם CSRF בפנים
 app.use('/api/giftcards', giftCardRoutes);
 // פרומו גיפט – מנגנון נפרד לחלוטין
 app.use('/api/promo-gifts', promoGiftRoutes);
+// Users routes
+app.use('/api/users', usersRoutes);
 
 // Admin routes (protected, no CSRF for easier API usage)
 app.use('/api/admin', adminRoutes);

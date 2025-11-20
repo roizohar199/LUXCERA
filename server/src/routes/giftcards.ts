@@ -143,15 +143,19 @@ router.post(
       return res.status(400).json({ ok: false, error: 'code is required' });
     }
 
+    // נרמול הקוד - כמו ב-orders.ts - trim + uppercase
+    const normalizedCode = String(code).trim().toUpperCase();
+
     const conn = await pool.getConnection();
 
     try {
       await conn.beginTransaction();
 
       // ננעל את הרשומה כדי למנוע double-spend
+      // נשתמש ב-UPPER(TRIM()) כדי למצוא את ה-Gift Card גם עם הבדלי case או רווחים
       const [rows] = await conn.query(
-        `SELECT * FROM gift_cards WHERE code = ? FOR UPDATE`,
-        [code]
+        `SELECT * FROM gift_cards WHERE UPPER(TRIM(code)) = ? FOR UPDATE`,
+        [normalizedCode]
       );
 
       if ((rows as any[]).length === 0) {
@@ -161,7 +165,16 @@ router.post(
 
       const card = (rows as any[])[0];
 
-      // בדיקת סטטוס
+      // בדיקת סטטוס - אם הסטטוס הוא 'used', זה אומר שה-Gift Card שומש עד תומו
+      if (card.status === 'used') {
+        await conn.rollback();
+        return res.status(400).json({ 
+          ok: false, 
+          error: 'Gift Card זה שומש עד תומו ולא ניתן להשתמש בו שוב' 
+        });
+      }
+
+      // בדיקת סטטוס - רק 'active' מותר
       if (card.status !== 'active') {
         await conn.rollback();
         return res.status(400).json({ ok: false, error: 'Gift card is not active' });
@@ -252,11 +265,15 @@ router.get(
     }
 
     try {
+      // נרמול הקוד - כמו ב-orders.ts - trim + uppercase
+      const normalizedCode = String(code).trim().toUpperCase();
+      
+      // חיפוש לפי הקוד המנורמל - כמו ב-orders.ts
       const [rows] = await pool.query(
-        `SELECT id, code, initial_amount, balance, currency, status, expires_at, issued_at
+        `SELECT id, code, initial_amount, balance, currency, status, expires_at, issued_at, order_id
          FROM gift_cards 
-         WHERE code = ?`,
-        [code]
+         WHERE UPPER(TRIM(code)) = ?`,
+        [normalizedCode]
       );
 
       if ((rows as any[]).length === 0) {
@@ -270,6 +287,17 @@ router.get(
         // עדכון סטטוס אם פג תוקף
         await pool.query(`UPDATE gift_cards SET status='expired' WHERE id=?`, [card.id]);
         card.status = 'expired';
+      }
+      
+      // בדיקה אם ה-Gift Card שומש במלואו - אם היתרה היא 0, הסטטוס צריך להיות 'used'
+      const balance = Number(card.balance) || 0;
+      const status = card.status;
+      
+      // אם היתרה היא 0 אבל הסטטוס לא 'used', נעדכן אותו
+      if (balance === 0 && status !== 'used') {
+        console.log(`[giftcards] Fixing status for Gift Card ${card.code}: balance is 0 but status is ${status}, updating to 'used'`);
+        await pool.query(`UPDATE gift_cards SET status='used' WHERE id=?`, [card.id]);
+        card.status = 'used';
       }
 
       // מחזיר רק את המידע הרלוונטי (ללא פרטים רגישים)

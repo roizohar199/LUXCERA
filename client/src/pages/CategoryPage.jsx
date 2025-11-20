@@ -4,6 +4,7 @@ import { useApp } from '../context/AppContext';
 import Layout from '../components/Layout';
 import Footer from '../components/Footer';
 import ProductsCarousel from '../components/ProductsCarousel';
+import bestPriceImage from '../assets/best-price - Copy.png';
 
 // Base API URL helper
 const getApiUrl = (path) => {
@@ -35,6 +36,18 @@ function CategoryPage() {
     }
   }, []);
 
+  // Scroll to top כשנכנסים לקטגוריה
+  React.useEffect(() => {
+    window.scrollTo({ top: 0, behavior: 'instant' });
+  }, [category]);
+
+  // בדיקה שהתמונה נטענת (רק בדיבוג)
+  React.useEffect(() => {
+    if (category === 'sales') {
+      console.log('Sales page - Background image:', bestPriceImage);
+    }
+  }, [category, bestPriceImage]);
+
   // Load products from API
   React.useEffect(() => {
     const loadProducts = async () => {
@@ -55,6 +68,7 @@ function CategoryPage() {
             imageUrl: product.imageUrl,
             category: product.category || 'general',
             description: product.description,
+            isNew: product.isNew === 1 || product.isNew === true,
           }));
           setAllProducts(transformed);
         } else {
@@ -86,8 +100,8 @@ function CategoryPage() {
     'sales': { title: 'מבצעים', filter: (p) => p.category === 'sales' || p.category === 'מבצעים' || p.on_sale === true || p.sale_price != null },
     'sets': { title: 'מארזים', filter: (p) => p.category === 'sets' || p.category === 'מארזים' || p.category === 'general' },
     'wax-pearls': { title: 'פניני שעווה', filter: (p) => p.category === 'pearls' || p.category === 'פנינים' },
-    'accessories': { title: 'אביזרים', filter: (p) => p.category === 'accessories' || p.category === 'אביזרים' },
-    'gift-packages': { title: 'מארזי מתנה', filter: (p) => p.category === 'gift-packages' || p.category === 'מארזי מתנה' || p.category === 'gift' },
+    'accessories': { title: 'נרות אור ויוקרה', filter: (p) => p.category === 'accessories' || p.category === 'אביזרים' || p.category === 'נרות אור ויוקרה' },
+    'gift-packages': { title: 'מוצרי מתנה', filter: (p) => p.category === 'gift-packages' || p.category === 'מארזי מתנה' || p.category === 'מוצרי מתנה' || p.category === 'gift' },
   };
 
   const categoryInfo = categoryMap[category];
@@ -139,21 +153,39 @@ function CategoryPage() {
       isLoggedIn={isLoggedIn}
       userName={userName}
     >
-      <div className="min-h-screen bg-ivory pt-20">
-        {loadingProducts ? (
-          <div className="flex items-center justify-center min-h-[400px]">
-            <div className="text-center">
-              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gold mx-auto mb-4"></div>
-              <p className="text-gray-600">טוען מוצרים...</p>
-            </div>
-          </div>
-        ) : (
-          <ProductsCarousel
-            title={categoryInfo.title}
-            products={filteredProducts}
-            onAddToCart={handleAddToCart}
+      <div className="min-h-screen bg-ivory pt-4 relative">
+        {/* רקע שקוף עם תמונת מבצעים - רק בדף המבצעים */}
+        {category === 'sales' && (
+          <div 
+            className="fixed inset-0 pointer-events-none z-0"
+            style={{
+              backgroundImage: `url(${bestPriceImage})`,
+              backgroundSize: 'cover',
+              backgroundPosition: 'center',
+              backgroundRepeat: 'no-repeat',
+              opacity: 0.25,
+              filter: 'blur(30px) grayscale(15%)',
+              mixBlendMode: 'multiply'
+            }}
+            aria-hidden="true"
           />
         )}
+        <div className="relative z-10">
+          {loadingProducts ? (
+            <div className="flex items-center justify-center min-h-[400px]">
+              <div className="text-center">
+                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gold mx-auto mb-4"></div>
+                <p className="text-gray-600">טוען מוצרים...</p>
+              </div>
+            </div>
+          ) : (
+            <ProductsCarousel
+              title={categoryInfo.title}
+              products={filteredProducts}
+              onAddToCart={handleAddToCart}
+            />
+          )}
+        </div>
       </div>
       <Footer />
     </Layout>

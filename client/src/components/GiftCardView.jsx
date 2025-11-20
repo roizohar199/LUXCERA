@@ -74,13 +74,23 @@ export default function GiftCardView({ code, onBack }) {
     );
   }
 
-  const isActive = giftCard.status === 'active' && !giftCard.isExpired;
+  // Gift Card פעיל רק אם הסטטוס הוא 'active', לא פג תוקף, ויש יתרה גדולה מ-0
+  // אם הסטטוס הוא 'used' או שהיתרה היא 0, זה לא פעיל
+  const balance = Number(giftCard.balance) || 0;
+  const isActive = giftCard.status === 'active' && !giftCard.isExpired && balance > 0;
+  const isUsed = giftCard.status === 'used' || balance <= 0;
+  
   const statusText = {
-    active: 'פעיל',
-    used: 'משומש',
+    active: isUsed ? 'משומש / לא פעיל' : 'פעיל',
+    used: 'משומש / לא פעיל',
     expired: 'פג תוקף',
     cancelled: 'בוטל',
+    disabled: 'לא פעיל',
+    inactive: 'לא פעיל',
   };
+  
+  // אם היתרה היא 0 או הסטטוס הוא 'used', נציג "משומש / לא פעיל"
+  const displayStatus = isUsed ? 'משומש / לא פעיל' : (statusText[giftCard.status] || giftCard.status);
 
   return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4" dir="rtl">
@@ -103,7 +113,7 @@ export default function GiftCardView({ code, onBack }) {
               isActive ? 'text-green-600' : 'text-red-600'
             }`}>
               {isActive ? <CheckCircle className="w-5 h-5" /> : <XCircle className="w-5 h-5" />}
-              {statusText[giftCard.status] || giftCard.status}
+              {displayStatus}
             </span>
           </div>
 
@@ -113,10 +123,20 @@ export default function GiftCardView({ code, onBack }) {
               <DollarSign className="w-5 h-5" />
               יתרה:
             </span>
-            <span className="text-2xl font-bold text-[#4A6741]">
+            <span className={`text-2xl font-bold ${balance > 0 ? 'text-[#4A6741]' : 'text-red-600'}`}>
               ₪{Number(giftCard.balance).toFixed(2)}
             </span>
           </div>
+          
+          {/* הודעה כש-Gift Card שומש עד תומו */}
+          {balance === 0 && (
+            <div className="p-4 bg-red-50 border-2 border-red-300 rounded-lg">
+              <div className="flex items-center gap-2 text-red-800">
+                <XCircle className="w-5 h-5" />
+                <span className="font-bold">כרטיס זה שומש עד תומו ואין אפשרות להשתמש בו</span>
+              </div>
+            </div>
+          )}
 
           {/* Initial Amount */}
           <div className="flex items-center justify-between p-4 border border-gray-200 rounded-lg">

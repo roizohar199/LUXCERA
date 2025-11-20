@@ -3,6 +3,7 @@
  */
 
 import mysql from 'mysql2/promise';
+import type { ResultSetHeader } from 'mysql2';
 import 'dotenv/config';
 
 // MySQL connection configuration
@@ -58,12 +59,49 @@ export async function initDatabase() {
         imageUrl VARCHAR(500) NOT NULL,
         category VARCHAR(100) NOT NULL DEFAULT 'general',
         isActive TINYINT(1) NOT NULL DEFAULT 1,
+        isNew TINYINT(1) NOT NULL DEFAULT 0,
+        video_url VARCHAR(500),
+        video_file VARCHAR(500),
+        additional_images TEXT,
+        colors TEXT,
         createdAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
         updatedAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
         INDEX idx_products_category (category),
-        INDEX idx_products_active (isActive)
+        INDEX idx_products_active (isActive),
+        INDEX idx_products_new (isNew)
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     `);
+    
+    // Add new columns if they don't exist (for existing databases)
+    try {
+      const [videoUrlColumns] = await pool.query(`SHOW COLUMNS FROM products LIKE 'video_url'`) as [any[], any];
+      if (videoUrlColumns.length === 0) {
+        await pool.query(`ALTER TABLE products ADD COLUMN video_url VARCHAR(500)`);
+      }
+      
+      const [videoFileColumns] = await pool.query(`SHOW COLUMNS FROM products LIKE 'video_file'`) as [any[], any];
+      if (videoFileColumns.length === 0) {
+        await pool.query(`ALTER TABLE products ADD COLUMN video_file VARCHAR(500)`);
+      }
+      
+      const [additionalImagesColumns] = await pool.query(`SHOW COLUMNS FROM products LIKE 'additional_images'`) as [any[], any];
+      if (additionalImagesColumns.length === 0) {
+        await pool.query(`ALTER TABLE products ADD COLUMN additional_images TEXT`);
+      }
+      
+      const [colorColumns] = await pool.query(`SHOW COLUMNS FROM products LIKE 'colors'`) as [any[], any];
+      if (colorColumns.length === 0) {
+        await pool.query(`ALTER TABLE products ADD COLUMN colors TEXT`);
+      }
+      
+      const [isNewColumns] = await pool.query(`SHOW COLUMNS FROM products LIKE 'isNew'`) as [any[], any];
+      if (isNewColumns.length === 0) {
+        await pool.query(`ALTER TABLE products ADD COLUMN isNew TINYINT(1) NOT NULL DEFAULT 0`);
+        await pool.query(`ALTER TABLE products ADD INDEX idx_products_new (isNew)`);
+      }
+    } catch (err: any) {
+      console.warn('Warning: Could not add new columns to products:', err.message);
+    }
 
     // Users table (for regular customers)
     await pool.query(`
@@ -164,44 +202,32 @@ export async function initDatabase() {
 
     // Ensure admin user exists with correct credentials
     const bcrypt = await import('bcryptjs');
-    const targetUsername = 'LUXCERA777';
-    const targetPassword = 'Keren1981';
+    const targetUsername = 'admin';
+    const targetPassword = 'admin123';
     
-    // Check if target admin exists
-    const [targetAdminRows] = await pool.query(
-      'SELECT * FROM admin_users WHERE username = ?',
+    // Check if admin user exists (case-insensitive)
+    const [adminRows] = await pool.query(
+      'SELECT * FROM admin_users WHERE LOWER(username) = LOWER(?)',
       [targetUsername]
     ) as [any[], any];
     
-    if (targetAdminRows.length > 0) {
+    const passwordHash = await bcrypt.default.hash(targetPassword, 10);
+    
+    if (adminRows.length > 0) {
       // Update password if needed (in case it changed)
-      const passwordHash = await bcrypt.default.hash(targetPassword, 10);
+      const existingUser = adminRows[0];
       await pool.query(
-        'UPDATE admin_users SET passwordHash = ? WHERE username = ?',
-        [passwordHash, targetUsername]
+        'UPDATE admin_users SET passwordHash = ? WHERE id = ?',
+        [passwordHash, existingUser.id]
       );
+      console.log('✅ Admin user password updated:', targetUsername);
     } else {
-      // Check if old admin exists and update it
-      const [oldAdminRows] = await pool.query(
-        'SELECT * FROM admin_users WHERE username = ?',
-        ['admin']
-      ) as [any[], any];
-      
-      const passwordHash = await bcrypt.default.hash(targetPassword, 10);
-      
-      if (oldAdminRows.length > 0) {
-        // Update old admin to new username and password
-        await pool.query(
-          'UPDATE admin_users SET username = ?, passwordHash = ? WHERE username = ?',
-          [targetUsername, passwordHash, 'admin']
-        );
-      } else {
-        // Create new admin user
-        await pool.query(
-          'INSERT INTO admin_users (username, passwordHash) VALUES (?, ?)',
-          [targetUsername, passwordHash]
-        );
-      }
+      // Create new admin user
+      await pool.query(
+        'INSERT INTO admin_users (username, passwordHash) VALUES (?, ?)',
+        [targetUsername, passwordHash]
+      );
+      console.log('✅ Admin user created:', targetUsername);
     }
 
     // User carts table (עגלות קניות למשתמשים)
@@ -238,6 +264,76 @@ export async function initDatabase() {
         note VARCHAR(255) NULL,
         INDEX (status),
         INDEX (token)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    `);
+
+    // Promotional Banners table
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS promotional_banners (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        title VARCHAR(255) NOT NULL,
+        description TEXT,
+        image_url VARCHAR(500),
+        link_url VARCHAR(500),
+        discount_percent INT,
+        is_active TINYINT(1) NOT NULL DEFAULT 1,
+        starts_at DATETIME,
+        ends_at DATETIME,
+        created_by INT NULL,
+        created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        INDEX idx_banners_active (is_active),
+        INDEX idx_banners_dates (starts_at, ends_at)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    `);
+
+    // Loyalty Club tables
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS loyalty_members (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        user_id INT NOT NULL,
+        status ENUM('ACTIVE', 'INACTIVE') NOT NULL DEFAULT 'ACTIVE',
+        total_points INT NOT NULL DEFAULT 0,
+        used_points INT NOT NULL DEFAULT 0,
+        total_spent DECIMAL(10,2) NOT NULL DEFAULT 0,
+        join_date DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        birthday DATE NULL,
+        phone VARCHAR(20) NULL,
+        marketing_opt_in TINYINT(1) NOT NULL DEFAULT 0,
+        signup_bonus_given TINYINT(1) NOT NULL DEFAULT 0,
+        created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        CONSTRAINT fk_loyalty_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+        INDEX idx_loyalty_user (user_id),
+        INDEX idx_loyalty_status (status)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    `);
+    
+    // Add signup_bonus_given column if it doesn't exist (for existing databases)
+    try {
+      await pool.query(`
+        ALTER TABLE loyalty_members 
+        ADD COLUMN signup_bonus_given TINYINT(1) NOT NULL DEFAULT 0
+      `);
+    } catch (error: any) {
+      // Column already exists, ignore error
+      if (error.code !== 'ER_DUP_FIELDNAME') {
+        console.warn('Could not add signup_bonus_given column:', error.message);
+      }
+    }
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS loyalty_transactions (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        member_id INT NOT NULL,
+        type ENUM('EARN', 'REDEEM') NOT NULL,
+        points INT NOT NULL,
+        description VARCHAR(255) NOT NULL,
+        created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        CONSTRAINT fk_loyalty_member FOREIGN KEY (member_id) REFERENCES loyalty_members(id) ON DELETE CASCADE,
+        INDEX idx_loyalty_member (member_id),
+        INDEX idx_loyalty_type (type),
+        INDEX idx_loyalty_created (created_at)
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     `);
   } catch (error) {
@@ -281,10 +377,15 @@ export const products = {
     imageUrl: string;
     category?: string;
     isActive?: boolean;
+    isNew?: boolean;
+    video_url?: string | null;
+    video_file?: string | null;
+    additional_images?: string | null;
+    colors?: string | null;
   }) => {
     const [result] = await pool.query(
-      `INSERT INTO products (title, description, price, salePrice, imageUrl, category, isActive)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO products (title, description, price, salePrice, imageUrl, category, isActive, isNew, video_url, video_file, additional_images, colors)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         product.title,
         product.description || null,
@@ -292,7 +393,12 @@ export const products = {
         product.salePrice || null,
         product.imageUrl,
         product.category || 'general',
-        product.isActive !== false ? 1 : 0
+        product.isActive !== false ? 1 : 0,
+        product.isNew === true ? 1 : 0,
+        product.video_url || null,
+        product.video_file || null,
+        product.additional_images || null,
+        product.colors || null
       ]
     ) as [mysql.ResultSetHeader, any];
     
@@ -307,6 +413,11 @@ export const products = {
     imageUrl?: string;
     category?: string;
     isActive?: boolean;
+    isNew?: boolean;
+    video_url?: string | null;
+    video_file?: string | null;
+    additional_images?: string | null;
+    colors?: string | null;
   }) => {
     const fields: string[] = [];
     const values: any[] = [];
@@ -338,6 +449,26 @@ export const products = {
     if (updates.isActive !== undefined) {
       fields.push('isActive = ?');
       values.push(updates.isActive ? 1 : 0);
+    }
+    if (updates.isNew !== undefined) {
+      fields.push('isNew = ?');
+      values.push(updates.isNew ? 1 : 0);
+    }
+    if (updates.video_url !== undefined) {
+      fields.push('video_url = ?');
+      values.push(updates.video_url || null);
+    }
+    if (updates.video_file !== undefined) {
+      fields.push('video_file = ?');
+      values.push(updates.video_file || null);
+    }
+    if (updates.additional_images !== undefined) {
+      fields.push('additional_images = ?');
+      values.push(updates.additional_images || null);
+    }
+    if (updates.colors !== undefined) {
+      fields.push('colors = ?');
+      values.push(updates.colors || null);
     }
 
     if (fields.length === 0) {
@@ -373,6 +504,29 @@ export const users = {
       [email.toLowerCase(), fullName]
     ) as [mysql.ResultSetHeader, any];
     return result.insertId;
+  },
+
+  updateProfile: async (currentEmail: string, updates: { email?: string; fullName?: string }) => {
+    const fields: string[] = [];
+    const values: any[] = [];
+
+    if (updates.email !== undefined) {
+      fields.push('email = ?');
+      values.push(updates.email.toLowerCase());
+    }
+    if (updates.fullName !== undefined) {
+      fields.push('full_name = ?');
+      values.push(updates.fullName);
+    }
+
+    if (fields.length === 0) return { affectedRows: 0 };
+
+    values.push(currentEmail.toLowerCase());
+    const [result] = await pool.query(
+      `UPDATE users SET ${fields.join(', ')} WHERE email = ?`,
+      values
+    ) as [mysql.ResultSetHeader, any];
+    return result;
   },
 };
 
@@ -417,4 +571,14 @@ export const giftCards = {
   },
 };
 
+// Helper function for INSERT/UPDATE/DELETE that returns ResultSetHeader with insertId
+export async function execute(
+  sql: string,
+  params: any[] = []
+): Promise<ResultSetHeader> {
+  const [result] = await pool.execute(sql, params);
+  return result as ResultSetHeader;
+}
+
+export { pool };
 export default pool;

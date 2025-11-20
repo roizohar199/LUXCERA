@@ -15,19 +15,18 @@ function Footer() {
       <div className="absolute inset-0 bg-gradient-to-b from-gold/10 via-transparent to-transparent pointer-events-none" />
       <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-gold/30 to-transparent" />
       <Section>
-        <div className="grid md:grid-cols-3 gap-8 mb-8">
-          <div>
-            <h3 className="font-semibold mb-4">חנות</h3>
-            <ul className="space-y-2 text-sm text-white/80">
-              <li><a href="#בית" className="hover:text-white transition">בית</a></li>
-              <li><a href="#קטלוג" className="hover:text-white transition">קטלוג</a></li>
-              <li><Link to="/contact" className="hover:text-white transition">יצירת קשר</Link></li>
-            </ul>
+        <div className="grid md:grid-cols-2 gap-8 mb-8" dir="ltr">
+          <div className="text-left">
+            <h3 className="font-semibold mb-4">הצטרפות לקהילה שלנו</h3>
+            <form className="flex gap-2 justify-start" onSubmit={(e) => e.preventDefault()}>
+              <input type="email" placeholder="אימייל" className="flex-1 bg-white/10 border-b-2 border-white/30 text-white placeholder-white/50 px-2 py-2 focus:outline-none focus:border-white transition-colors" aria-label="אימייל לניוזלטר" />
+              <button type="submit" className="text-white hover:opacity-70 transition text-left" aria-label="שלח">→</button>
+            </form>
           </div>
 
-          <div>
+          <div className="text-right">
             <h3 className="font-semibold mb-4">יצירת קשר</h3>
-            <div className="flex gap-4">
+            <div className="flex gap-4 justify-end">
               <a href="https://facebook.com" className="hover:opacity-70 transition" target="_blank" rel="noopener noreferrer" aria-label="פייסבוק">
                 <Facebook className="w-5 h-5" />
               </a>
@@ -43,13 +42,6 @@ function Footer() {
             </div>
           </div>
 
-          <div>
-            <h3 className="font-semibold mb-4">הצטרפות לקהילה שלנו</h3>
-            <form className="flex gap-2" onSubmit={(e) => e.preventDefault()}>
-              <input type="email" placeholder="אימייל" className="flex-1 bg-white/10 border-b-2 border-white/30 text-white placeholder-white/50 px-2 py-2 focus:outline-none focus:border-white transition-colors" aria-label="אימייל לניוזלטר" />
-              <button type="submit" className="text-white hover:opacity-70 transition" aria-label="שלח">→</button>
-            </form>
-          </div>
         </div>
 
         <div className="border-t border-gold/30 pt-8 text-center text-sm text-white/60 relative z-10">

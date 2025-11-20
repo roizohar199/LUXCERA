@@ -30,7 +30,13 @@ function GiftCardApply({ orderTotal, onApply }) {
         balance: data.balance, 
         code: code.trim() 
       });
-      setMsg(`שויך בהצלחה: ₪${data.applied.toFixed(2)} | יתרה נשארה: ₪${data.balance.toFixed(2)}`);
+      
+      // הודעה מותאמת לפי היתרה
+      if (Number(data.balance) === 0) {
+        setMsg(`שויך בהצלחה: ₪${data.applied.toFixed(2)} | ⚠️ כרטיס זה שומש עד תומו ואין אפשרות להשתמש בו שוב`);
+      } else {
+        setMsg(`שויך בהצלחה: ₪${data.applied.toFixed(2)} | יתרה נשארה: ₪${data.balance.toFixed(2)}`);
+      }
       setMsgType('success');
       
       // Clear code on success
@@ -38,9 +44,14 @@ function GiftCardApply({ orderTotal, onApply }) {
     } catch (err) {
       console.error('Gift Card redeem error:', err);
       const errorMessage = err.message || 'שגיאה במימוש Gift Card';
-      // אם זו שגיאת CSRF, נציג הודעה ברורה יותר
+      
+      // זיהוי סוגי שגיאות שונים
       if (errorMessage.includes('CSRF') || errorMessage.includes('403')) {
         setMsg('שגיאת אבטחה. אנא רענן את הדף ונסה שוב.');
+      } else if (errorMessage.includes('לא זמין') || errorMessage.includes('ECONNREFUSED') || errorMessage.includes('proxy')) {
+        setMsg('⚠️ השרת לא זמין כרגע. אנא ודא שהשרת רץ ונסה שוב. אם הבעיה נמשכת, צור קשר עם התמיכה.');
+      } else if (errorMessage.includes('רשת') || errorMessage.includes('network')) {
+        setMsg('שגיאת רשת. אנא בדוק את החיבור לאינטרנט ונסה שוב.');
       } else {
         setMsg(errorMessage);
       }

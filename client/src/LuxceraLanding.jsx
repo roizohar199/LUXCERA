@@ -1,12 +1,13 @@
 import React from 'react';
 import { motion } from 'framer-motion';
 import { useNavigate, Link } from 'react-router-dom';
+import { useApp } from './context/AppContext';
 import { useGoogleLogin } from '@react-oauth/google';
 import {
   Search, User, ShoppingBag, Phone, Mail, Instagram, Facebook, Menu, X, Trash2, Plus, Minus, Package,
   Settings, Heart, ChevronLeft, ChevronRight, Maximize2, Minimize2, Type, Eye, Link as LinkIcon, Hash,
   Palette, Contrast, Filter, Keyboard, Volume2, RotateCcw, AlertTriangle, Flag, Shield, Info, HelpCircle,
-  Wand2, Image as ImageIcon, Hand, Headphones, ArrowRight, CreditCard, MapPin, CheckCircle
+  Wand2, Image as ImageIcon, Hand, Headphones, ArrowRight, CreditCard, MapPin, CheckCircle, Truck, Gift, TrendingUp
 } from 'lucide-react';
 import BitPaymentButton from './components/BitPaymentButton';
 import GiftCardApply from './components/GiftCardApply';
@@ -15,7 +16,12 @@ import GiftCardView from './components/GiftCardView';
 import GiftCardEntryButton from './components/GiftCardEntryButton';
 import Footer from './components/Footer';
 import CategoryShowcase from './components/CategoryShowcase';
+import PromoBannerModal from './components/PromoBannerModal';
+import ClubJoinForm from './components/ClubJoinForm';
+import ClubDashboard from './components/ClubDashboard';
+import { apiClubMe } from './api/club';
 import luxceraLogo from './assets/Luxcera Logo.png';
+import candleBg1 from './assets/candle-bg-1.png';
 
 // Base API URL from environment variables (עם פולבק בטוח לדומיין הנוכחי)
 // משתמשים ב-path יחסי /api/... דרך proxy של Vite כדי למנוע בעיות כפילות
@@ -79,9 +85,39 @@ function PromoBanner() {
 function Nav({ onCartClick, onUserClick, onSearchClick, cartCount, isLoggedIn, userName }) {
   const [mobileMenuOpen, setMobileMenuOpen] = React.useState(false);
   const navigate = useNavigate();
+  const { userEmail } = useApp();
+  const [isClubMember, setIsClubMember] = React.useState(false);
+  const [clubLoading, setClubLoading] = React.useState(true);
+  
+  const scrollToClub = () => {
+    const clubSection = document.getElementById('מועדון-לקוחות');
+    if (clubSection) {
+      clubSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  };
+  
+  React.useEffect(() => {
+    async function checkClubMember() {
+      if (!isLoggedIn || !userEmail) {
+        setClubLoading(false);
+        return;
+      }
+      
+      try {
+        const data = await apiClubMe(userEmail);
+        setIsClubMember(!!data.member);
+      } catch (err) {
+        setIsClubMember(false);
+      } finally {
+        setClubLoading(false);
+      }
+    }
+    
+    checkClubMember();
+  }, [isLoggedIn, userEmail]);
+  
   const links = [
     { name: 'בית', href: '#בית', onClick: () => window.location.hash = 'בית' },
-    { name: 'קטלוג', href: '#קטלוג', onClick: () => window.location.hash = 'קטלוג' },
     { name: 'יצירת קשר', href: '/contact', onClick: () => navigate('/contact') }
   ];
 
@@ -103,6 +139,27 @@ function Nav({ onCartClick, onUserClick, onSearchClick, cartCount, isLoggedIn, u
         </div>
 
         <div className="flex items-center gap-5">
+          {!(clubLoading || (isLoggedIn && isClubMember)) && (
+            <div className="hidden lg:block">
+              <div className="bg-black border-2 border-gold rounded-lg p-3 shadow-xl max-w-[240px]">
+                <div className="text-center mb-2">
+                  <p className="text-gold text-xs mb-1" style={{ fontFamily: 'sans-serif' }}>
+                    הטבות בלעדיות לחברי המועדון בלבד
+                  </p>
+                  <p className="text-gold text-xs" style={{ fontFamily: 'sans-serif' }}>
+                    צבירת נקודות למימוש בהזמנות באתר
+                  </p>
+                </div>
+                <button
+                  onClick={scrollToClub}
+                  className="w-full bg-gold hover:bg-gold/90 text-black font-semibold py-2 px-3 rounded-lg transition-colors text-xs shadow-lg shadow-gold/20"
+                  style={{ fontFamily: 'sans-serif' }}
+                >
+                  הרשמה למועדון
+                </button>
+              </div>
+            </div>
+          )}
           <button onClick={onSearchClick} className="text-gold hover:text-gold/80 transition" aria-label="חיפוש">
             <Search className="w-6 h-6" />
           </button>
@@ -186,9 +243,16 @@ function Hero() {
               נרות שעווה יוקרתיים בעבודת יד, עם ריחות מרגיעים וצבעים מותאמים אישית
             </p>
             <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
-              <Link to="/contact" className="inline-block bg-gold hover:bg-gold/90 text-black-lux px-10 py-4 rounded-xl font-semibold transition-colors shadow-gold text-lg border-2 border-gold">
+              <button
+                type="button"
+                onClick={() => {
+                  const el = document.getElementById('קטגוריות');
+                  if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }}
+                className="inline-block bg-gold hover:bg-gold/90 text-black-lux px-10 py-4 rounded-xl font-semibold transition-colors shadow-gold text-lg border-2 border-gold"
+              >
                 הזמן עכשיו
-              </Link>
+              </button>
             </motion.div>
           </motion.div>
         </div>
@@ -198,6 +262,7 @@ function Hero() {
 }
 
 function ProductsCarousel({ onAddToCart, title, products }) {
+  const navigate = useNavigate();
   const [currentIndex, setCurrentIndex] = React.useState(0);
   const maxIndex = Math.max(0, products.length - 4);
 
@@ -242,11 +307,16 @@ function ProductsCarousel({ onAddToCart, title, products }) {
               </>
             )}
 
-            <div className="flex gap-6 overflow-hidden">
+            <div className="flex gap-12 overflow-hidden">
               {visibleProducts.map(product => {
                 const hasSalePrice = product.salePrice && product.salePrice > 0;
                 return (
-                  <motion.div key={product.id} whileHover={{ y: -8 }} className="flex-shrink-0 w-64 bg-white border-2 border-gold/20 rounded-lg overflow-hidden cursor-pointer group relative shadow-luxury hover:shadow-gold transition-all">
+                  <motion.div 
+                    key={product.id} 
+                    whileHover={{ y: -16 }} 
+                    className="flex-shrink-0 w-[512px] bg-white border-2 border-gold/20 rounded-lg overflow-hidden cursor-pointer group relative shadow-luxury hover:shadow-gold transition-all"
+                    onClick={() => navigate(`/product/${product.id}`)}
+                  >
                     <div 
                       className="absolute inset-0 bg-packages-bg bg-cover bg-center bg-no-repeat opacity-20 rounded-lg"
                       style={{
@@ -255,39 +325,49 @@ function ProductsCarousel({ onAddToCart, title, products }) {
                       role="img"
                       aria-label="מארז נרות ברקע המוצר"
                     />
-                    <div className="aspect-square bg-white flex items-center justify-center p-8 relative overflow-hidden z-10">
+                    <div className="aspect-square bg-white flex items-center justify-center p-16 relative overflow-hidden z-10">
                       {product.imageUrl ? (
                         <img src={product.imageUrl} alt={product.name} className="w-full h-full object-cover transform group-hover:scale-110 transition-transform" />
                       ) : (
-                        <div className="text-8xl transform group-hover:scale-110 transition-transform">{product.image}</div>
+                        <div className="text-[16rem] transform group-hover:scale-110 transition-transform">{product.image}</div>
                       )}
                       {hasSalePrice && (
-                        <div className="sale-ribbon">
+                        <div className="sale-ribbon text-2xl px-6 py-3">
                           מחיר מבצע
                         </div>
                       )}
-                      <div className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-gold/60 via-gold to-gold/60"></div>
+                      {product.isNew === 1 || product.isNew === true ? (
+                        <div className="new-ribbon text-2xl px-6 py-3">
+                          חדש
+                        </div>
+                      ) : null}
+                      <div className="absolute bottom-0 left-0 right-0 h-2 bg-gradient-to-r from-gold/60 via-gold to-gold/60"></div>
                     </div>
 
-                    <div className="p-6 relative z-10 bg-ivory/95 backdrop-blur-sm border-t border-gold/10">
-                      <h3 className="font-semibold text-gray-900 mb-3 text-lg" style={{ fontFamily: 'serif' }}>{product.name}</h3>
-                      <div className="mb-4">
+                    <div className="p-12 relative z-10 bg-ivory/95 backdrop-blur-sm border-t border-gold/10">
+                      <h3 className="font-semibold text-gray-900 mb-6 text-2xl" style={{ fontFamily: 'serif' }}>{product.name}</h3>
+                      <div className="mb-8">
                         {hasSalePrice ? (
-                          <div className="flex flex-col gap-1">
-                            <div className="flex items-center gap-2">
-                              <span className="text-gold font-semibold">מבצע:</span>
-                              <span className="text-gold text-2xl font-bold">₪ {Number(product.salePrice).toFixed(2)}</span>
+                          <div className="flex flex-col gap-2">
+                            <div className="flex items-center gap-4">
+                              <span className="text-gold font-semibold text-xl">מבצע:</span>
+                              <span className="text-gold text-4xl font-bold">₪ {Number(product.salePrice).toFixed(2)}</span>
                             </div>
-                            <span className="text-gray-400 text-sm line-through">₪ {Number(product.originalPrice).toFixed(2)}</span>
+                            <span className="text-gray-400 text-base line-through">₪ {Number(product.originalPrice).toFixed(2)}</span>
                           </div>
                         ) : (
-                          <p className="text-gray-700 text-xl font-semibold">₪ {Number(product.price).toFixed(2)}</p>
+                          <p className="text-gray-700 text-2xl font-semibold">₪ {Number(product.price).toFixed(2)}</p>
                         )}
                       </div>
                       <button
                         type="button"
-                        onClick={() => product.inStock && onAddToCart(product)}
-                        className={`w-full py-3 rounded-lg font-semibold transition-colors ${product.inStock ? 'bg-black text-white hover:bg-gray-800' : 'bg-gray-400 text-white cursor-not-allowed'}`}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (product.inStock) {
+                            onAddToCart(product);
+                          }
+                        }}
+                        className={`w-full py-6 rounded-lg font-semibold text-xl transition-colors ${product.inStock ? 'bg-black text-white hover:bg-gray-800' : 'bg-gray-400 text-white cursor-not-allowed'}`}
                         disabled={!product.inStock}
                       >
                         {product.inStock ? 'הוספה לסל' : 'אזל מהמלאי'}
@@ -334,11 +414,16 @@ function ProductsCarousel({ onAddToCart, title, products }) {
             </>
           )}
 
-          <div className="flex gap-6 overflow-hidden">
+          <div className="flex gap-12 overflow-hidden">
             {visibleProducts.map(product => {
               const hasSalePrice = product.salePrice && product.salePrice > 0;
               return (
-                <motion.div key={product.id} whileHover={{ y: -8 }} className={`flex-shrink-0 w-64 bg-white border border-gray-200 rounded-lg overflow-hidden cursor-pointer group ${title === 'מארזים' ? 'relative' : ''}`}>
+                <motion.div 
+                  key={product.id} 
+                  whileHover={{ y: -16 }} 
+                  className={`flex-shrink-0 w-[512px] bg-white border-2 border-gold/20 rounded-lg overflow-hidden cursor-pointer group relative shadow-luxury hover:shadow-gold transition-all ${title === 'מארזים' ? 'relative' : ''}`}
+                  onClick={() => navigate(`/product/${product.id}`)}
+                >
                   {title === 'מארזים' && (
                     <div 
                       className="absolute inset-0 bg-cover bg-center bg-no-repeat opacity-25 rounded-lg"
@@ -350,39 +435,49 @@ function ProductsCarousel({ onAddToCart, title, products }) {
                       aria-label="מארז נרות ברקע המוצר"
                     />
                   )}
-                  <div className={`aspect-square ${product.color} flex items-center justify-center p-8 relative overflow-hidden ${title === 'מארזים' ? 'z-10' : ''}`}>
+                  <div className={`aspect-square ${product.color} flex items-center justify-center p-16 relative overflow-hidden ${title === 'מארזים' ? 'z-10' : ''}`}>
                     {product.imageUrl ? (
                       <img src={product.imageUrl} alt={product.name} className="w-full h-full object-cover transform group-hover:scale-110 transition-transform" />
                     ) : (
-                      <div className="text-8xl transform group-hover:scale-110 transition-transform">{product.image}</div>
+                      <div className="text-[16rem] transform group-hover:scale-110 transition-transform">{product.image}</div>
                     )}
                     {hasSalePrice && (
-                      <div className="sale-ribbon">
+                      <div className="sale-ribbon text-2xl px-6 py-3">
                         מחיר מבצע
                       </div>
                     )}
-                    <div className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-gold/60 via-gold to-gold/60"></div>
+                    {product.isNew === 1 || product.isNew === true ? (
+                      <div className="new-ribbon text-2xl px-6 py-3">
+                        חדש
+                      </div>
+                    ) : null}
+                    <div className="absolute bottom-0 left-0 right-0 h-2 bg-gradient-to-r from-gold/60 via-gold to-gold/60"></div>
                   </div>
 
-                  <div className={`p-6 ${title === 'מארזים' ? 'relative z-10 bg-white/80 backdrop-blur-sm' : ''}`}>
-                    <h3 className="font-semibold text-gray-900 mb-3 text-lg" style={{ fontFamily: 'serif' }}>{product.name}</h3>
-                    <div className="mb-4">
+                  <div className={`p-12 ${title === 'מארזים' ? 'relative z-10 bg-white/80 backdrop-blur-sm' : 'bg-white'}`}>
+                    <h3 className="font-semibold text-gray-900 mb-6 text-2xl" style={{ fontFamily: 'serif' }}>{product.name}</h3>
+                    <div className="mb-8">
                       {hasSalePrice ? (
-                        <div className="flex flex-col gap-1">
-                          <div className="flex items-center gap-2">
-                            <span className="text-gold font-semibold">מבצע:</span>
-                            <span className="text-gold text-2xl font-bold">₪ {Number(product.salePrice).toFixed(2)}</span>
+                        <div className="flex flex-col gap-2">
+                          <div className="flex items-center gap-4">
+                            <span className="text-gold font-semibold text-xl">מבצע:</span>
+                            <span className="text-gold text-4xl font-bold">₪ {Number(product.salePrice).toFixed(2)}</span>
                           </div>
-                          <span className="text-gray-400 text-sm line-through">₪ {Number(product.originalPrice).toFixed(2)}</span>
+                          <span className="text-gray-400 text-base line-through">₪ {Number(product.originalPrice).toFixed(2)}</span>
                         </div>
                       ) : (
-                        <p className="text-gray-700 text-xl font-semibold">₪ {Number(product.price).toFixed(2)}</p>
+                        <p className="text-gray-700 text-2xl font-semibold">₪ {Number(product.price).toFixed(2)}</p>
                       )}
                     </div>
                     <button
                       type="button"
-                      onClick={() => product.inStock && onAddToCart(product)}
-                      className={`w-full py-3 rounded-lg font-semibold transition-colors ${product.inStock ? 'bg-black text-white hover:bg-gray-800' : 'bg-gray-400 text-white cursor-not-allowed'}`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (product.inStock) {
+                          onAddToCart(product);
+                        }
+                      }}
+                      className={`w-full py-6 rounded-lg font-semibold text-xl transition-colors ${product.inStock ? 'bg-black text-white hover:bg-gray-800' : 'bg-gray-400 text-white cursor-not-allowed'}`}
                       disabled={!product.inStock}
                     >
                       {product.inStock ? 'הוספה לסל' : 'אזל מהמלאי'}
@@ -399,7 +494,7 @@ function ProductsCarousel({ onAddToCart, title, products }) {
 
 function Gallery() {
   return (
-    <Section id="גלריה" className="py-20 bg-ivory">
+    <Section id="גלריה" className="py-20">
       {/* גלריה תמונות */}
     </Section>
   );
@@ -407,24 +502,49 @@ function Gallery() {
 
 function About() {
   return (
-    <Section id="אודות" className="py-20 bg-ivory">
+    <Section id="אודות" className="py-20">
       <div className="text-center mb-12">
-        <h2 className="text-4xl font-bold text-gray-900 mb-4">אודות LUXCERA</h2>
-        <p className="text-gray-600 max-w-3xl mx-auto leading-relaxed">
+        <h2 
+          className="text-4xl font-bold mb-4"
+          style={{
+            color: '#D4AF37',
+            fontFamily: 'serif',
+            textShadow: '0 0 10px rgba(0, 0, 0, 0.8), 0 0 20px rgba(0, 0, 0, 0.6), 3px 3px 0px rgba(0, 0, 0, 0.5), 6px 6px 10px rgba(0, 0, 0, 0.3), 0 0 20px rgba(212, 175, 55, 0.5)',
+            letterSpacing: '0.05em'
+          }}
+        >
+          אודות LUXCERA
+        </h2>
+        <p 
+          className="max-w-3xl mx-auto leading-relaxed text-lg mb-6"
+          style={{
+            color: '#D4AF37',
+            textShadow: '0 0 8px rgba(0, 0, 0, 0.8), 0 0 15px rgba(0, 0, 0, 0.6), 2px 2px 0px rgba(0, 0, 0, 0.5), 4px 4px 8px rgba(0, 0, 0, 0.3), 0 0 15px rgba(212, 175, 55, 0.4)',
+            letterSpacing: '0.02em',
+            fontWeight: 500
+          }}
+        >
           ב-LUXCERA אנו יוצרים נרות שעווה יוקרתיים בעבודת יד, עם דגש על איכות, יופי וריחות מרגיעים.
           כל נר נבנה בקפידה ומתוך אהבה למלאכה.
         </p>
       </div>
 
-      <div className="grid md:grid-cols-2 gap-6 max-w-2xl mx-auto">
+      <div className="grid md:grid-cols-3 gap-6 max-w-4xl mx-auto">
         {[
-          { icon: '💎', title: 'איכות גבוהה', desc: 'שעווה איכותית וארומה מתמשכת' },
-          { icon: '✨', title: 'בעבודת יד', desc: 'יצירה קפדנית ואומנותית' },
-        ].map(({ icon, title, desc }) => (
-          <div key={title} className="bg-white border-2 border-gold/20 rounded-lg p-6 text-center hover:shadow-gold transition-all shadow-luxury" role="article" aria-label={title}>
-            <div className="text-4xl mb-4" aria-hidden="true">{icon}</div>
-            <h3 className="font-semibold text-gray-900 mb-2 text-lg">{title}</h3>
-            <p className="text-gray-600 text-sm">{desc}</p>
+          { icon: '💎', title: 'איכות גבוהה', desc: 'שעווה איכותית וארומה מתמשכת', IconComponent: null },
+          { icon: '✨', title: 'בעבודת יד', desc: 'יצירה קפדנית ואומנותית', IconComponent: null },
+          { icon: null, title: 'משלוחים חינם', desc: 'משלוח חינם ברכישה מעל 300 ש״ח', IconComponent: Truck },
+        ].map(({ icon, title, desc, IconComponent }) => (
+          <div key={title} className="bg-black border-2 border-gold/20 rounded-lg p-6 text-center hover:shadow-gold transition-all shadow-luxury" role="article" aria-label={title}>
+            {IconComponent ? (
+              <div className="flex justify-center mb-4" aria-hidden="true">
+                <IconComponent className="w-12 h-12 text-gold" />
+              </div>
+            ) : (
+              <div className="text-4xl mb-4" aria-hidden="true">{icon}</div>
+            )}
+            <h3 className="font-semibold text-gold mb-2 text-lg">{title}</h3>
+            <p className="text-gold/80 text-sm">{desc}</p>
           </div>
         ))}
       </div>
@@ -432,8 +552,170 @@ function About() {
   );
 }
 
+function LoyaltyClubSection({ onAccountClick }) {
+  const { isLoggedIn, userEmail } = useApp();
+  const navigate = useNavigate();
+  const [isClubMember, setIsClubMember] = React.useState(false);
+  const [clubLoading, setClubLoading] = React.useState(true);
+  const [member, setMember] = React.useState(null);
 
-function AccountModal({ isOpen, onClose, isLoggedIn, setIsLoggedIn, showCartMessage = false, onLoginSuccess }) {
+  React.useEffect(() => {
+    async function checkClubMember() {
+      if (!isLoggedIn || !userEmail) {
+        setClubLoading(false);
+        return;
+      }
+      
+      try {
+        const data = await apiClubMe(userEmail);
+        setIsClubMember(!!data.member);
+        setMember(data.member);
+      } catch (err) {
+        setIsClubMember(false);
+      } finally {
+        setClubLoading(false);
+      }
+    }
+    
+    checkClubMember();
+  }, [isLoggedIn, userEmail]);
+
+  const handleJoinClick = () => {
+    navigate('/profile');
+  };
+
+  return (
+    <Section id="מועדון-לקוחות" className="py-20">
+      <div className="text-center mb-12">
+        <div className="flex items-center justify-center gap-3 mb-4">
+          <Gift className="w-10 h-10 text-gold" />
+          <h2 
+            className="text-4xl font-bold"
+            style={{
+              color: '#D4AF37',
+              fontFamily: 'serif',
+              textShadow: '0 0 10px rgba(0, 0, 0, 0.8), 0 0 20px rgba(0, 0, 0, 0.6), 3px 3px 0px rgba(0, 0, 0, 0.5), 6px 6px 10px rgba(0, 0, 0, 0.3), 0 0 20px rgba(212, 175, 55, 0.5)',
+              letterSpacing: '0.05em'
+            }}
+          >
+            מועדון לקוחות LUXCERA
+          </h2>
+        </div>
+        <p 
+          className="max-w-3xl mx-auto leading-relaxed text-lg mb-6"
+          style={{
+            color: '#D4AF37',
+            textShadow: '0 0 8px rgba(0, 0, 0, 0.8), 0 0 15px rgba(0, 0, 0, 0.6), 2px 2px 0px rgba(0, 0, 0, 0.5), 4px 4px 8px rgba(0, 0, 0, 0.3), 0 0 15px rgba(212, 175, 55, 0.4)',
+            letterSpacing: '0.02em',
+            fontWeight: 500
+          }}
+        >
+          הצטרף למועדון הלקוחות שלנו וצבור נקודות בכל רכישה! מתנת הצטרפות: 50 ש"ח (מותנה בקנייה מעל 150 ש"ח)
+        </p>
+      </div>
+
+      <div className="max-w-4xl mx-auto">
+        {clubLoading ? (
+          <div className="text-center py-12">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gold mx-auto mb-4"></div>
+            <p className="text-gold/80">טוען נתוני מועדון...</p>
+          </div>
+        ) : isLoggedIn && isClubMember && member ? (
+          <div className="bg-black border-2 border-gold/30 rounded-lg p-8 shadow-xl">
+            <div className="grid md:grid-cols-3 gap-6 mb-6">
+              <div className="bg-gold/10 rounded-lg p-6 border border-gold/20 text-center">
+                <TrendingUp className="w-8 h-8 text-gold mx-auto mb-3" />
+                <p className="text-sm text-gold/80 mb-2">נקודות זמינות</p>
+                <p className="text-3xl font-bold text-gold">
+                  {(member.total_points - member.used_points).toLocaleString('he-IL')}
+                </p>
+              </div>
+              <div className="bg-gold/10 rounded-lg p-6 border border-gold/20 text-center">
+                <ShoppingBag className="w-8 h-8 text-gold mx-auto mb-3" />
+                <p className="text-sm text-gold/80 mb-2">סה״כ רכישות</p>
+                <p className="text-2xl font-bold text-gold">
+                  {Number(member.total_spent).toLocaleString('he-IL', {
+                    style: 'currency',
+                    currency: 'ILS',
+                    minimumFractionDigits: 0,
+                  })}
+                </p>
+              </div>
+              <div className="bg-gold/10 rounded-lg p-6 border border-gold/20 text-center">
+                <Gift className="w-8 h-8 text-gold mx-auto mb-3" />
+                <p className="text-sm text-gold/80 mb-2">סטטוס</p>
+                <p className="text-xl font-bold text-gold">
+                  {member.status === 'ACTIVE' ? 'פעיל' : 'לא פעיל'}
+                </p>
+              </div>
+            </div>
+            <div className="text-center">
+              <button
+                onClick={() => navigate('/profile')}
+                className="bg-gold hover:bg-gold/90 text-black px-8 py-3 rounded-lg font-semibold transition-colors shadow-lg"
+              >
+                צפה בדשבורד המלא
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="bg-black border-2 border-gold/30 rounded-lg p-8 shadow-xl text-center">
+            <div className="mb-6">
+              <div className="grid md:grid-cols-3 gap-6 mb-6">
+                <div className="bg-gold/10 rounded-lg p-6 border border-gold/20">
+                  <Gift className="w-8 h-8 text-gold mx-auto mb-3" />
+                  <h3 className="font-semibold text-gold mb-2">מתנת הצטרפות</h3>
+                  <p className="text-gold/80 text-sm">50 ש"ח מתנה</p>
+                  <p className="text-gold/60 text-xs mt-1">מותנה בקנייה מעל 150 ש"ח</p>
+                  <Link 
+                    to="/loyalty-club-terms" 
+                    className="text-gold/70 hover:text-gold text-xs underline mt-1 inline-block"
+                  >
+                    תנאי שימוש
+                  </Link>
+                </div>
+                <div className="bg-gold/10 rounded-lg p-6 border border-gold/20">
+                  <TrendingUp className="w-8 h-8 text-gold mx-auto mb-3" />
+                  <h3 className="font-semibold text-gold mb-2">צבירת נקודות</h3>
+                  <p className="text-gold/80 text-sm">5% החזר נקודות בכל רכישה</p>
+                </div>
+                <div className="bg-gold/10 rounded-lg p-6 border border-gold/20">
+                  <ShoppingBag className="w-8 h-8 text-gold mx-auto mb-3" />
+                  <h3 className="font-semibold text-gold mb-2">מימוש נקודות</h3>
+                  <p className="text-gold/80 text-sm">הנחות והטבות בלעדיות</p>
+                </div>
+              </div>
+            </div>
+            {isLoggedIn ? (
+              <button
+                onClick={handleJoinClick}
+                className="bg-gold hover:bg-gold/90 text-black px-10 py-4 rounded-lg font-semibold text-lg transition-colors shadow-lg"
+              >
+                הצטרף למועדון עכשיו
+              </button>
+            ) : (
+              <div>
+                <p className="text-gold/80 mb-4 text-lg">
+                  התחבר או הירשם כדי להצטרף למועדון הלקוחות
+                </p>
+                <button
+                  onClick={onAccountClick}
+                  className="bg-gold hover:bg-gold/90 text-black px-10 py-4 rounded-lg font-semibold text-lg transition-colors shadow-lg"
+                >
+                  התחבר / הירשם
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </Section>
+  );
+}
+
+
+function AccountModal({ isOpen, onClose, showCartMessage = false, onLoginSuccess }) {
+  const { login, logout, isLoggedIn: contextIsLoggedIn } = useApp();
   const navigate = useNavigate();
   const [mode, setMode] = React.useState('login'); // 'login' or 'register'
   
@@ -460,7 +742,7 @@ function AccountModal({ isOpen, onClose, isLoggedIn, setIsLoggedIn, showCartMess
   
   // עדכון פרטי משתמש מ-localStorage כשהמודאל נפתח והמשתמש מחובר
   React.useEffect(() => {
-    if (isOpen && isLoggedIn) {
+    if (isOpen && contextIsLoggedIn) {
       const savedEmail = localStorage.getItem('luxcera_userEmail');
       const savedUserName = localStorage.getItem('luxcera_userName');
       if (savedEmail || savedUserName) {
@@ -470,11 +752,11 @@ function AccountModal({ isOpen, onClose, isLoggedIn, setIsLoggedIn, showCartMess
           fullName: savedUserName || prev.fullName,
         }));
       }
-    } else if (!isLoggedIn) {
+    } else if (!contextIsLoggedIn) {
       // אם המשתמש לא מחובר, איפוס formData
       setFormData({ fullName: '', email: '', password: '', confirmPassword: '', phone: '' });
     }
-  }, [isOpen, isLoggedIn]);
+  }, [isOpen, contextIsLoggedIn]);
 
   const googleLogin = useGoogleLogin({
     onSuccess: async (tokenResponse) => {
@@ -521,7 +803,7 @@ function AccountModal({ isOpen, onClose, isLoggedIn, setIsLoggedIn, showCartMess
               localStorage.setItem('luxcera_userEmail', userEmail);
             }
             setLoading(false);
-            setIsLoggedIn(true);
+            login({ name: fullName, email: userEmail });
             onLoginSuccess?.(fullName); // עדכון שם המשתמש ב-parent component
             setSuccessType('login');
             setShowSuccessMessage(true);
@@ -560,7 +842,7 @@ function AccountModal({ isOpen, onClose, isLoggedIn, setIsLoggedIn, showCartMess
           const userEmail = userInfo.email || '';
           setFormData({ fullName, email: userEmail, password: '', confirmPassword: '', phone: '' });
           setLoading(false);
-          setIsLoggedIn(true);
+          login({ name: fullName, email: userEmail });
           // שמירת אימייל ב-localStorage
           if (userEmail) {
             localStorage.setItem('luxcera_userEmail', userEmail);
@@ -647,7 +929,7 @@ function AccountModal({ isOpen, onClose, isLoggedIn, setIsLoggedIn, showCartMess
       }
 
       setLoading(false);
-      setIsLoggedIn(true);
+      login({ name: formData.fullName, email: formData.email });
       // עדכון שם המשתמש ב-parent component
       if (formData.fullName) {
         onLoginSuccess?.(formData.fullName);
@@ -676,9 +958,9 @@ function AccountModal({ isOpen, onClose, isLoggedIn, setIsLoggedIn, showCartMess
   if (!isOpen) return null;
 
   // הודעה אם צריך להתחבר כדי לראות עגלה
-  const showCartPrompt = showCartMessage && !isLoggedIn;
+  const showCartPrompt = showCartMessage && !contextIsLoggedIn;
 
-  if (isLoggedIn) {
+  if (contextIsLoggedIn) {
     return (
       <div className="fixed inset-0 z-50 flex items-center justify-center">
         <div className="absolute inset-0 bg-black/50" onClick={onClose}></div>
@@ -721,7 +1003,12 @@ function AccountModal({ isOpen, onClose, isLoggedIn, setIsLoggedIn, showCartMess
               <ArrowRight className="w-5 h-5 text-gray-400" />
             </button>
 
-            <button className="w-full flex items-center justify-between border border-gray-300 rounded-lg p-4 hover:bg-gray-50 transition-colors">
+            <button 
+              onClick={() => {
+                onClose();
+                navigate('/profile');
+              }}
+              className="w-full flex items-center justify-between border border-gray-300 rounded-lg p-4 hover:bg-gray-50 transition-colors">
               <div className="flex items-center gap-3">
                 <Settings className="w-5 h-5 text-gray-700" />
                 <span className="font-semibold text-gray-900">פרופיל</span>
@@ -730,7 +1017,7 @@ function AccountModal({ isOpen, onClose, isLoggedIn, setIsLoggedIn, showCartMess
             </button>
 
             <button onClick={() => {
-              setIsLoggedIn(false);
+              logout();
               onLoginSuccess?.(''); // איפוס שם המשתמש
             }} className="w-full bg-red-600 hover:bg-red-700 text-white px-6 py-3 rounded-lg font-semibold transition-colors mt-4">
               התנתק
@@ -1031,20 +1318,161 @@ function SearchModal({ isOpen, onClose, products, onAddToCart }) {
   );
 }
 
-// רשימת ערים ישראליות
-const ISRAELI_CITIES = [
+// רשימת ערים, מושבים וקיבוצים בישראל - ללא כפילויות
+const ISRAELI_CITIES_RAW = [
   'תל אביב', 'ירושלים', 'חיפה', 'ראשון לציון', 'אשדוד', 'נתניה', 'באר שבע',
   'בני ברק', 'חולון', 'רמת גן', 'אשקלון', 'רחובות', 'בת ים', 'כפר סבא',
   'הרצליה', 'מודיעין', 'לוד', 'רמת השרון', 'רמלה', 'אילת', 'עכו',
   'טבריה', 'צפת', 'נצרת', 'עפולה', 'נהריה', 'קריית שמונה', 'מגדל העמק',
   'כרמיאל', 'קריית גת', 'דימונה', 'אריאל', 'בית שמש', 'נתיבות', 'קריית מלאכי',
   'שדרות', 'סחנין', 'אום אל פחם', 'טייבה', 'רהט', 'נס ציונה', 'קריית אונו',
-  'גבעתיים', 'יהוד', 'רמת השרון', 'ראש העין', 'יבנה', 'אור יהודה', 'גבעת שמואל',
+  'גבעתיים', 'יהוד', 'ראש העין', 'יבנה', 'אור יהודה', 'גבעת שמואל',
   'קריית אתא', 'קריית ביאליק', 'קריית ים', 'קריית מוצקין', 'זכרון יעקב', 'מעלות',
-  'מצפה רמון', 'ערד', 'דימונה', 'ירוחם', 'מיתר', 'להבים', 'עומר', 'לקיה'
-].sort();
+  'מצפה רמון', 'ערד', 'ירוחם', 'מיתר', 'להבים', 'עומר', 'לקיה',
+  'בית דגן', 'הוד השרון', 'כפר יונה', 'מעלה אדומים', 'קריית טבעון', 'רעננה',
+  'רשפון', 'שוהם', 'תל מונד', 'אבן יהודה', 'אזור', 'בני עטרות', 'גבעת כ"ח',
+  'גני תקווה', 'זכריה', 'חדרה', 'טירת כרמל', 'יקנעם עילית',
+  'מגדיאל', 'מזכרת בתיה', 'מעברות', 'נס הרים', 'עין הוד', 'פרדס חנה',
+  'קדימה', 'רמת ישי', 'שדה ורבורג', 'אבו גוש', 'אביאל', 'אבן שמואל',
+  'אור עקיבא', 'אורנית', 'אליכין', 'ארסוף', 'באר טוביה', 'באר יעקב', 'בית ברל',
+  'בית חנן', 'בית חירות', 'בית יצחק', 'בית נחמיה', 'בית עוזיאל', 'בית עריף',
+  'בית רבן', 'בני דרור', 'בני עי"ש', 'בני ציון', 'בצרה', 'בר גיורא',
+  'גבעת ברנר', 'גבעת חיים', 'גבעת ניל"י', 'גבעת עדה', 'גדרה',
+  'גן יבנה', 'גן שמואל', 'גני הדר', 'גת רימון', 'דגניה', 'דורות',
+  'כפר ביל"ו', 'כפר גלים', 'כפר המכבי', 'כפר הנוער', 'כפר חב"ד', 'כפר מנדא',
+  'כפר שמואל', 'מגידו', 'מקווה ישראל', 'פתח תקווה',
+  'אביחיל', 'אבן יצחק', 'אדרת', 'אודם', 'אורים', 'אורן', 'אושה', 'אחוזת ברק',
+  'אחיטוב', 'איבים', 'אילון', 'איתן', 'אלוני אבא', 'אלוני יצחק', 'אלונים',
+  'אליפלט', 'אלישיב', 'אלישמע', 'אליקים', 'אלרום', 'אלרואי', 'אמונים',
+  'אמציה', 'אניעם', 'אסד', 'אשדות יעקב', 'אשדות יעקב מאוחד', 'אשדות יעקב איחוד',
+  'אשלים', 'אשתאול', 'אתגר', 'בארות יצחק', 'בארותיים', 'בארי', 'בוסתן הגליל',
+  'בורגתה', 'בחן', 'ביצרון', 'בית אורן', 'בית אלעזרי', 'בית גוברין', 'בית גמליאל',
+  'בית דוד', 'בית הלוי', 'בית הלל', 'בית זיד', 'בית זית', 'בית חורון', 'בית ינאי',
+  'בית יצחק-שער חפר', 'בית לחם הגלילית', 'בית מאיר', 'בית נקופה',
+  'בית עובד', 'בית קמה', 'בית רמות', 'בית רימון', 'בית שאן',
+  'בית שקמה', 'ביתן אהרן', 'בלפוריה', 'בן שמן', 'בני דקלים',
+  'בני ראם', 'בנימינה', 'בר יוחאי', 'ברור חיל', 'ברכיה', 'ברקאי', 'ברקן', 'ברקת', 'בת הדר', 'בת חן',
+  'בת חפר', 'בת שלמה', 'גאולי תימן', 'גאולים', 'גאליה', 'גבולות', 'גבים',
+  'גבע', 'גבע כ"ח', 'גבעולים', 'גבעון החדשה', 'גבעות בר', 'גבעת אבני', 'גבעת בוסתן',
+  'גבעת השלושה', 'גבעת זאב', 'גבעת חיים איחוד',
+  'גבעת עוז', 'גבעת שפירא', 'גבעתי',
+  'גברעם', 'גבת', 'גדות', 'גדיש', 'גדעונה',
+  'גונן', 'גורן', 'גזית', 'גיאה', 'גיבתון', 'גיזו', 'גילון', 'גילת', 'גינוסר',
+  'גיניגר', 'גינתון', 'גיתה', 'גיתית', 'גלאון', 'גליל ים', 'גלעד', 'גמזו',
+  'גן הדרום', 'גן השומרון', 'גן חיים', 'גן יאשיה', 'גן נר',
+  'גן שורק', 'גנות', 'גנות הדר', 'גני טל', 'גני יוחנן',
+  'גני מודיעין', 'געש', 'געתון', 'גפן', 'גרופית', 'גשור', 'גשר',
+  'גשר הזיו', 'גת', 'דבורה', 'דבירה', 'דברת', 'דגניה א', 'דגניה ב',
+  'דוב"ב', 'דור', 'דחי', 'דייר אל-אסד', 'דייר חנא', 'דייר רפאת',
+  'דישון', 'דליה', 'דלתון', 'דמיידה', 'דן', 'דפנה', 'האון', 'הבונים',
+  'הגושרים', 'הודיה', 'הוזייל', 'הושעיה', 'הזורע', 'הזורעים',
+  'החותרים', 'היוגב', 'הילה', 'המעפיל', 'הסוללים', 'העוגן', 'הר אדר', 'הר גילה',
+  'הר עמשא', 'הראל', 'הרדוף', 'זבארה', 'זבדיאל', 'זוהר',
+  'זיקים', 'זמר', 'זמרת', 'זנוח', 'זרועה', 'זרזיר',
+  'זריקיה', 'חד-נס', 'חוגלה', 'חולדה', 'חולית', 'חולתה',
+  'חוסן', 'חוסנייה', 'חופית', 'חוקוק', 'חורון', 'חורשים', 'חזון', 'חיבת ציון',
+  'חיננית', 'חירות', 'חלוץ', 'חלמיש', 'חלץ', 'חמד', 'חמדיה', 'חמדת',
+  'חניאל', 'חניתה', 'חנתון', 'חספין', 'חפץ חיים', 'חפצי-בה', 'חצב', 'חצבה',
+  'חצור-אשדוד', 'חצור הגלילית', 'חצרים', 'חרובית', 'חרות', 'חרמש', 'חרשים',
+  'טובא-זנגריה', 'טורעאן', 'טירה', 'טירת יהודה',
+  'טירת צבי', 'טל-אל', 'טל שחר', 'טללים', 'טלמון', 'טמרה', 'טמרה יזרעאל',
+  'טנא', 'טפחות', 'יאנוח-גת', 'יבול', 'יגור', 'יגל', 'יד השמונה', 'יד חנה',
+  'יד מרדכי', 'יד נתן', 'יד רמב"ם', 'ידידה', 'יהל', 'יובל', 'יודפת', 'יונתן',
+  'יושיביה', 'יזרעאל', 'יחיעם', 'יטבתה', 'ייט"ב', 'יכיני', 'ינוב', 'ינון',
+  'יסודות', 'יסוד המעלה', 'יסעור', 'יעד', 'יעל', 'יערה', 'יערות הכרמל',
+  'יפיע', 'יפית', 'יפעת', 'יפתח', 'יצהר', 'יציץ', 'יקום', 'יקיר', 'יראון',
+  'ירדנה', 'ירחיב', 'ירקונה', 'ישע', 'ישעי', 'ישרש', 'יתד', 'כאבול',
+  'כאוכב אבו אל-היגא', 'כברי', 'כדורי', 'כדיתה', 'כוכב השחר', 'כוכב יאיר',
+  'כוכב מיכאל', 'כורזים', 'כחל', 'כחלה', 'כיסופים', 'כישור', 'כליל', 'כלנית',
+  'כמאנה', 'כמהין', 'כמון', 'כנות', 'כנף', 'כנרת', 'כסיפה', 'כסלון', 'כסרא-סמיע',
+  'כעביה-טבאש-חגאגרה', 'כרם בן שמן', 'כרם בן זימרה', 'כרם יבנה', 'כרם מהר"ל',
+  'כרם שלום', 'כרמי יוסף', 'כרמי צור', 'כרמיה', 'כרמים', 'כרמית',
+  'כרנסא', 'כרתים', 'להב', 'להבות חביבה',
+  'לוטם', 'לוחמי הגיטאות', 'לוזית', 'לוחם', 'לימן', 'לכיש', 'לפיד', 'לפידות',
+  'מאור', 'מאיר שפיה', 'מבוא ביתר', 'מבוא חורון', 'מבוא מודיעין', 'מבואות ים', 'מבואות יריחו',
+  'מבואות עירון', 'מבואות תענך', 'מבוא חמה', 'מבטחים', 'מבקיעים', 'מבשרת ציון',
+  'מגאר', 'מגל', 'מגן', 'מגן שאול', 'מגשימים', 'מדרך עוז', 'מדרשת בן גוריון',
+  'מדרשת רופין', 'מודיעין עילית', 'מודיעין-מכבים-רעות', 'מולדת', 'מוצא עילית',
+  'מוקייבלה', 'מורן', 'מורשת', 'מזור', 'מזרעה', 'מחולה', 'מחנה הילה',
+  'מחנה תל נוף', 'מחנה יתיר', 'מחנה יפה', 'מחנה יקים', 'מחנה מרים', 'מחנה נחום',
+  'מחנה סירקין', 'מחנה עוז', 'מחנה רעים', 'מחניים', 'מחסיה',
+  'מטולה', 'מטע', 'מי עמי', 'מייסר', 'מיצר', 'מירב', 'מירון', 'מישר',
+  'מכורה', 'מכמורת', 'מכמנים', 'מלכיה', 'מנוחה', 'מנוף', 'מנות', 'מנחמיה',
+  'מנרה', 'מסד', 'מסדה', 'מסילות', 'מסילת ציון', 'מסלול', 'מסעדה',
+  'מעגן', 'מעגן מיכאל', 'מעוז חיים', 'מעון', 'מעונה', 'מעין ברוך', 'מעין צבי',
+  'מעלה גלבוע', 'מעלה גמלא', 'מעלה החמישה', 'מעלה לבונה',
+  'מעלה מכמש', 'מעלה עירון', 'מעלות-תרשיחא', 'מענית', 'מעש', 'מפלסים',
+  'מצובה', 'מצדות יהודה', 'מצפה', 'מצפה אביב', 'מצפה אילן', 'מצפה הילה',
+  'מצפה חגית', 'מצפה יריחו', 'מצפה נטופה', 'מצפה שלם', 'מצר',
+  'מרגליות', 'מרום גולן', 'מרחביה', 'מרחב עם', 'מרכז שפירא',
+  'משאבי שדה', 'משגב דב', 'משגב עם', 'משהד', 'משואה', 'משואות יצחק', 'משמר איילון',
+  'משמר דוד', 'משמר הירדן', 'משמר הנגב', 'משמר העמק', 'משמר השבעה', 'משמר השרון',
+  'משמרות', 'משמרת', 'משען', 'מתן', 'מתת', 'מתתיהו', 'נאות גולן', 'נאות הכיכר',
+  'נאות מרדכי', 'נאות סמדר', 'נבטים', 'נגבה', 'נגוהות', 'נהורה', 'נהלל',
+  'נוב', 'נוגה', 'נווה', 'נווה אבות', 'נווה אור', 'נווה אטי"ב', 'נווה אילן',
+  'נווה איתן', 'נווה דניאל', 'נווה זיו', 'נווה חריף', 'נווה ים', 'נווה ימין',
+  'נווה ירק', 'נווה מבטח', 'נווה מיכאל', 'נווה שלום', 'נועם', 'נוף איילון',
+  'נופים', 'נופית', 'נופך', 'נוקדים', 'נורדיה', 'נחושה', 'נחל עוז', 'נחלה',
+  'נחליאל', 'נחלים', 'נחלת יהודה', 'נחלת יצחק', 'נחם', 'נחף', 'נחשולים',
+  'נחשון', 'נחשונים', 'נטועה', 'נטור', 'נטע', 'נטעים', 'נטף', 'ניין',
+  'ניצן', 'ניצנה', 'ניצני עוז', 'ניצנים', 'ניר אליהו', 'ניר בנים', 'ניר גלים',
+  'ניר דוד', 'ניר ח"ן', 'ניר יפה', 'ניר יצחק', 'ניר ישראל', 'ניר משה', 'ניר עוז',
+  'ניר עם', 'ניר עציון', 'ניר עקיבא', 'ניר צבי', 'נירים', 'נירית',
+  'נס עמים', 'נעורים', 'נעלה', 'נעמ"ה', 'נען', 'נצר חזני', 'נצר סרני',
+  'נצרת עילית', 'נשר', 'נתיב הל"ה', 'נתיב הגדוד', 'נתיב העשרה', 'נתיב השיירה',
+  'סאסא', 'סביון', 'סגולה', 'סואעד', 'סולם', 'סומך', 'סוסיה',
+  'סופה', 'סייד', 'סלמה', 'סלעית', 'סמר', 'סנסנה', 'סעד', 'סער',
+  'ספיר', 'ספסופה', 'סתריה', 'עבדון', 'עברון', 'עגור', 'עדי', 'עדנים', 'עוזה',
+  'עוזייר', 'עולש', 'עופר', 'עופרה', 'עוצם', 'עוקבי', 'עזוז', 'עזר',
+  'עזריאל', 'עזריה', 'עזריקם', 'עטרת', 'עיינות', 'עין אילה', 'עין אל-אסד',
+  'עין גב', 'עין גדי', 'עין הדר', 'עין החורש', 'עין המפרץ', 'עין הנצי"ב',
+  'עין העמק', 'עין השופט', 'עין ורד', 'עין זיוון', 'עין חוד', 'עין חרוד',
+  'עין חרוד איחוד', 'עין חרוד מאוחד', 'עין יהב', 'עין יעקב', 'עין כרם-בי"ס חקלאי',
+  'עין כרמל', 'עין מאהל', 'עין נקובה', 'עין עירון', 'עין צורים', 'עין רפה',
+  'עין שמר', 'עין שריד', 'עין תמר', 'עינת', 'עיר אובות', 'עלומים',
+  'עלי', 'עלי זהב', 'עלמה', 'עלמון', 'עמוקה', 'עמיעד', 'עמיעוז', 'עמיקם',
+  'עמיר', 'עמנואל', 'עספיא', 'עצמון שגב', 'עראבה', 'ערוגות',
+  'ערערה', 'ערערה-בנגב', 'עשרת', 'עתלית', 'עתניאל', 'פארן', 'פדואל', 'פדיה',
+  'פוריה - כפר עבודה', 'פוריה - נווה עובד', 'פוריה עילית', 'פוריידיס', 'פורת',
+  'פטיש', 'פלך', 'פלמחים', 'פני קדם', 'פנימיית עין כרם', 'פסגות', 'פסוטה',
+  'פקיעין', 'פקיעין החדשה', 'פרדס חנה-כרכור', 'פרדסיה', 'פרוד', 'פרזון',
+  'צאלים', 'צביה', 'צובה', 'צוחר', 'צופיה', 'צופים', 'צופית', 'צופר', 'צוקי ים',
+  'צוקים', 'צור הדסה', 'צור יצחק', 'צור משה', 'צור נתן', 'צוריאל', 'צורית',
+  'ציפורי', 'צלפון', 'צנדלה', 'צפריה', 'צפרירים', 'צרופה', 'צרעה', 'קבועה',
+  'קבוצת יבנה', 'קדומים', 'קדמה', 'קדמת צבי', 'קדר', 'קדרון',
+  'קדרים', 'קודייראת א-צאנע', 'קוואעין', 'קוממיות', 'קורנית', 'קטורה', 'קיבוץ יגור',
+  'קיבוץ יפעת', 'קיבוץ רמת רחל', 'קידה', 'קיסריה', 'קלחים', 'קליה', 'קציר',
+  'קצר א-סר', 'קצרין', 'קרית ארבע', 'קרית יערים',
+  'קרית נטפים', 'קרית ענבים', 'קרית עקרון', 'קרני שומרון', 'ראס עלי',
+  'ראש פינה', 'ראש צורים', 'רבבה', 'רבדים', 'רביבים', 'רביד',
+  'רגבה', 'רגבים', 'רוויה', 'רוחמה', 'רומת הייב', 'רועי', 'רותם',
+  'רחוב', 'רחלים', 'ריחאניה', 'ריחן', 'רימונים', 'רינתיה', 'רכסים',
+  'רם-און', 'רמות', 'רמות השבים', 'רמות מאיר', 'רמות מנשה', 'רמות נפתלי',
+  'רמת דוד', 'רמת הכובש', 'רמת רחל', 'רמת רזיאל', 'רמת יוחנן',
+  'רמת מגשימים', 'רמת השופט',
+  'רמת טראמפ', 'רנן', 'רעים',
+  'רתמים', 'שאר ישוב', 'שבי דרום', 'שבי ציון', 'שבי שומרון', 'שבלי',
+  'שגב-שלום', 'שדה אילן', 'שדה אליהו', 'שדה אליעזר', 'שדה בוקר', 'שדה דוד',
+  'שדה יואב', 'שדה יעקב', 'שדה יצחק', 'שדה משה', 'שדה נחום',
+  'שדה נחמיה', 'שדה ניצן', 'שדה עוזיהו', 'שדות ים', 'שדות מיכה', 'שואבה',
+  'שובה', 'שובל', 'שומרה', 'שומריה', 'שוקדה', 'שורש', 'שורשים',
+  'שושנת העמקים', 'שזור', 'שחר', 'שחרות', 'שיבולים', 'שיזף', 'שיטים',
+  'שייח דנון', 'שילה', 'שילת', 'שכניה', 'שלווה', 'שלוחות', 'שלומי', 'שלומית',
+  'שמיר', 'שמעה', 'שמרת', 'שמשית', 'שני', 'שניר', 'שעב', 'שעל', 'שעלבים',
+  'שער אפרים', 'שער הגולן', 'שער העמקים', 'שער מנשה', 'שער שומרון', 'שפיים',
+  'שפר', 'שפרעם', 'שקד', 'שקף', 'שרונה', 'שריגים', 'שרשרת', 'שרת', 'שרתון',
+  'תאשור', 'תדהר', 'תובל', 'תומר', 'תושיה', 'תימורים', 'תירוש',
+  'תל אביב-יפו', 'תל יוסף', 'תל יצחק', 'תל עדשים', 'תל ערד',
+  'תל קציר', 'תל ציון', 'תל רעים', 'תל תאומים', 'תלם', 'תלמי אליהו', 'תלמי אלעזר',
+  'תלמי ביל"ו', 'תלמי יוסף', 'תלמי יחיאל', 'תלמי יפה', 'תלמים', 'תמרת', 'תנובות',
+  'תעוז', 'תפרח', 'תקומה', 'תרום', 'תרדיון', 'תרשיש', 'תשבי', 'תשע פינות'
+];
+
+// הסרת כפילויות ומיון
+const ISRAELI_CITIES = Array.from(new Set(ISRAELI_CITIES_RAW)).sort();
 
 function CheckoutModal({ isOpen, onClose, cart, onOrderComplete }) {
+  const { giftCardAmount, giftCardCode, promoAmount, applyGiftCard, applyPromoCode, clearDiscounts, getFinalTotal, getCartTotal } = useApp();
   const [step, setStep] = React.useState(1);
   const [shippingData, setShippingData] = React.useState({ fullName: '', email: '', phone: '', address: '', city: '', postalCode: '', notes: '' });
   const [paymentData, setPaymentData] = React.useState({ paymentMethod: 'bit' });
@@ -1057,9 +1485,6 @@ function CheckoutModal({ isOpen, onClose, cart, onOrderComplete }) {
   const [showCitySuggestions, setShowCitySuggestions] = React.useState(false);
   const cityInputRef = React.useRef(null);
   const [validationErrors, setValidationErrors] = React.useState({});
-  const [giftCardAmount, setGiftCardAmount] = React.useState(0);
-  const [giftCardCode, setGiftCardCode] = React.useState(null);
-  const [promoAmount, setPromoAmount] = React.useState(0);
 
   // שמירת הקרט המקורי - כדי שלא יאבד כשהקרט מתרוקן אחרי יצירת ההזמנה
   const [savedCart, setSavedCart] = React.useState([]);
@@ -1095,10 +1520,10 @@ function CheckoutModal({ isOpen, onClose, cart, onOrderComplete }) {
     return fee;
   }, [cartTotal]);
 
+  // שימוש ב-getFinalTotal מה-AppContext לחישוב הסכום הסופי
   const finalTotal = React.useMemo(() => {
-    const total = cartTotal + shippingFee - giftCardAmount - promoAmount;
-    return Math.max(0, total); // לא לרדת מתחת ל-0
-  }, [cartTotal, shippingFee, giftCardAmount, promoAmount]);
+    return getFinalTotal(shippingFee);
+  }, [getFinalTotal, shippingFee]);
 
   React.useEffect(() => {
     if (!isOpen) {
@@ -1113,11 +1538,9 @@ function CheckoutModal({ isOpen, onClose, cart, onOrderComplete }) {
       setCitySuggestions([]);
       setShowCitySuggestions(false);
       setValidationErrors({});
-      setGiftCardAmount(0);
-      setGiftCardCode(null);
-      setPromoAmount(0);
+      clearDiscounts(); // מנקים הנחות כשהמודאל נסגר
     }
-  }, [isOpen]);
+  }, [isOpen, clearDiscounts]);
 
   // פונקציה לסינון ערים לפי הקלדה
   const handleCityInputChange = (e) => {
@@ -1607,19 +2030,14 @@ function CheckoutModal({ isOpen, onClose, cart, onOrderComplete }) {
               <div className="border border-gray-200 rounded-lg p-4">
                 <GiftCardApply
                   orderTotal={cartTotal + shippingFee}
-                  onApply={(data) => {
-                    setGiftCardAmount(data.applied);
-                    setGiftCardCode(data.code || null);
-                  }}
+                  onApply={applyGiftCard}
                 />
               </div>
 
               <div className="border border-gray-200 rounded-lg p-4">
                 <PromoGiftApply
                   orderTotal={cartTotal + shippingFee - giftCardAmount}
-                  onApply={(applied) => {
-                    setPromoAmount(applied);
-                  }}
+                  onApply={applyPromoCode}
                 />
               </div>
 
@@ -1673,7 +2091,7 @@ function CheckoutModal({ isOpen, onClose, cart, onOrderComplete }) {
   );
 }
 
-function CartModal({ isOpen, onClose, cart, onUpdateQuantity, onRemoveItem, onCheckout }) {
+function CartModal({ isOpen, onClose, cart, onUpdateQuantity, onRemoveItem, onCheckout, isLoggedIn }) {
   if (!isOpen) return null;
 
   const cartTotal = cart.reduce((sum, item) => sum + (Number(item.price) * item.quantity), 0);
@@ -1693,13 +2111,15 @@ function CartModal({ isOpen, onClose, cart, onUpdateQuantity, onRemoveItem, onCh
         <div className="overflow-y-scroll p-6" style={{ flex: '1 1 auto', minHeight: 0, maxHeight: '100%' }}>
           {isEmpty ? (
             <div className="text-center py-12">
-              <h3 className="text-2xl font-bold text-gray-900 mb-4">Your cart is empty</h3>
-              <p className="text-gray-600 mb-2">
-                Have an account?
-                <a href="#" className="underline font-medium hover:text-gray-900"> Log in</a> to check out faster.
-              </p>
+              <h3 className="text-2xl font-bold text-gray-900 mb-4">העגלה שלך ריקה</h3>
+              {!isLoggedIn && (
+                <p className="text-gray-600 mb-2">
+                  יש לך חשבון?
+                  <a href="#" className="underline font-medium hover:text-gray-900"> התחבר</a> כדי להזמין מהר יותר.
+                </p>
+              )}
               <button onClick={onClose} className="mt-6 w-full bg-[#40E0D0] hover:bg-[#30D5C8] text-white px-6 py-3 rounded-lg font-semibold transition-colors">
-                Continue shopping
+                המשך לקניות
               </button>
             </div>
           ) : (
@@ -1928,6 +2348,7 @@ function AccessibilityWidget() {
 
 export default function LuxceraLanding() {
   const navigate = useNavigate();
+  const { isLoggedIn, login, cart, addToCart, updateCartQuantity, removeFromCart, openCart, closeCart, isCartOpen } = useApp();
   // בדיקה אם יש קישור Gift Card ב-URL
   const [giftCardCode, setGiftCardCode] = React.useState(() => {
     // בדיקה ראשונית של ה-URL
@@ -1945,21 +2366,15 @@ export default function LuxceraLanding() {
   const [accountOpen, setAccountOpen] = React.useState(false);
   const [searchOpen, setSearchOpen] = React.useState(false);
   const [checkoutOpen, setCheckoutOpen] = React.useState(false);
-  // טעינת סל מ-localStorage בהתחלה
-  const [cart, setCart] = React.useState(() => {
-    try {
-      const savedCart = localStorage.getItem('luxcera_cart');
-      if (savedCart) {
-        return JSON.parse(savedCart);
-      }
-    } catch (e) {
-      console.error('Error loading cart from localStorage:', e);
-    }
-    return [];
-  });
-  const [isLoggedIn, setIsLoggedIn] = React.useState(false);
+  
+  // סנכרון cartOpen עם isCartOpen מ-AppContext
+  React.useEffect(() => {
+    setCartOpen(isCartOpen);
+  }, [isCartOpen]);
   const [userName, setUserName] = React.useState(''); // שם המשתמש
   const [pendingCartOpen, setPendingCartOpen] = React.useState(false); // האם צריך לפתוח עגלה אחרי התחברות
+  const [promoBanner, setPromoBanner] = React.useState(null);
+  const [showPromoBanner, setShowPromoBanner] = React.useState(false);
 
   // טעינת מצב התחברות ושם משתמש מ-localStorage
   React.useEffect(() => {
@@ -1967,7 +2382,8 @@ export default function LuxceraLanding() {
     const savedUserName = localStorage.getItem('luxcera_userName');
     
     if (savedLoginState === 'true' && savedUserName) {
-      setIsLoggedIn(true);
+      const savedEmail = localStorage.getItem('luxcera_userEmail') || '';
+      login({ name: savedUserName, email: savedEmail });
       setUserName(savedUserName);
     }
   }, []);
@@ -1983,18 +2399,20 @@ export default function LuxceraLanding() {
     }
   }, [isLoggedIn, userName]);
 
-  // שמירת עגלה ב-localStorage בכל פעם שהעגלה משתנה
+  // שמירת עגלה ב-localStorage בכל פעם שהעגלה משתנה (רק למשתמשים לא מחוברים)
   React.useEffect(() => {
-    try {
-      if (cart.length > 0) {
-        localStorage.setItem('luxcera_cart', JSON.stringify(cart));
-      } else {
-        localStorage.removeItem('luxcera_cart');
+    if (!isLoggedIn) {
+      try {
+        if (cart.length > 0) {
+          localStorage.setItem('luxcera_cart', JSON.stringify(cart));
+        } else {
+          localStorage.removeItem('luxcera_cart');
+        }
+      } catch (e) {
+        console.error('Error saving cart to localStorage:', e);
       }
-    } catch (e) {
-      console.error('Error saving cart to localStorage:', e);
     }
-  }, [cart]);
+  }, [cart, isLoggedIn]);
 
   const handleCartClick = () => {
     if (!isLoggedIn) {
@@ -2002,11 +2420,14 @@ export default function LuxceraLanding() {
       setPendingCartOpen(true); // מסמן שצריך לפתוח עגלה אחרי התחברות
       setAccountOpen(true);
     } else {
-      // אם המשתמש מחובר - פותחים את העגלה
-      setCartOpen(true);
+      // אם המשתמש מחובר - פותחים את העגלה דרך AppContext
+      openCart();
     }
   };
-  const handleCloseCart = () => setCartOpen(false);
+  const handleCloseCart = () => {
+    setCartOpen(false);
+    closeCart();
+  };
   const handleAccountClick = () => setAccountOpen(true);
   const handleCloseAccount = () => {
     setAccountOpen(false);
@@ -2022,30 +2443,40 @@ export default function LuxceraLanding() {
   const handleCloseCheckout = () => setCheckoutOpen(false);
 
   const handleUpdateQuantity = (id, newQuantity) => {
-    if (newQuantity <= 0) { handleRemoveItem(id); return; }
-    setCart(cart.map(item => item.id === id ? { ...item, quantity: newQuantity } : item));
+    if (newQuantity <= 0) { 
+      handleRemoveItem(id); 
+      return; 
+    }
+    updateCartQuantity(id, newQuantity);
   };
 
-  const handleRemoveItem = (id) => setCart(cart.filter(item => item.id !== id));
+  const handleRemoveItem = (id) => removeFromCart(id);
   const cartCount = cart.reduce((sum, item) => sum + item.quantity, 0);
 
-  const handleAddToCart = (product) => {
+  const handleAddToCart = async (product) => {
     // בדיקה אם המשתמש מחובר
     if (!isLoggedIn) {
       // אם המשתמש לא מחובר - פתיחת מודאל ההרשמה עם הודעה
       setPendingCartOpen(true); // מסמן שצריך לפתוח עגלה אחרי התחברות
       setAccountOpen(true);
-      // אפשר להוסיף כאן הודעה נוספת אם צריך
       return;
     }
     
-    // אם המשתמש מחובר - הוספה רגילה לסל
-    const existingItem = cart.find(item => item.id === product.id);
-    if (existingItem) {
-      handleUpdateQuantity(product.id, existingItem.quantity + 1);
-    } else {
-      setCart([...cart, { ...product, quantity: 1 }]);
-    }
+    // שימוש ב-addToCart מ-AppContext
+    await addToCart({
+      id: product.id,
+      name: product.name,
+      price: product.salePrice || product.price,
+      originalPrice: product.price,
+      salePrice: product.salePrice || null,
+      quantity: 1,
+      inStock: product.inStock !== false,
+      color: product.color || null,
+      image: product.image || null,
+      imageUrl: product.imageUrl || null,
+      category: product.category || null,
+      description: product.description || null,
+    });
   };
 
   // Load products from API
@@ -2069,7 +2500,8 @@ export default function LuxceraLanding() {
             inStock: product.isActive === 1 || product.isActive === true,
             color: product.color || 'bg-white',
             image: product.imageUrl || '🕯️',
-            imageUrl: product.imageUrl, // Keep original for display
+            imageUrl: product.imageUrl,
+            isNew: product.isNew === 1 || product.isNew === true, // Keep original for display
             category: product.category || 'general',
             description: product.description,
           }));
@@ -2087,6 +2519,46 @@ export default function LuxceraLanding() {
     };
     loadProducts();
   }, []);
+
+  // Load active promotional banner - מופיע בכל רענון
+  React.useEffect(() => {
+    // מאפסים את המצב לפני טעינה
+    setShowPromoBanner(false);
+    setPromoBanner(null);
+    
+    const loadBanner = async () => {
+      try {
+        const response = await fetch(getApiUrl('/api/public/banners/active'));
+        if (response.ok) {
+          const data = await response.json();
+          if (data.ok && data.banner) {
+            // תמיד מציגים את הבאנר הפעיל בכל רענון
+            console.log('Banner loaded:', data.banner);
+            setPromoBanner(data.banner);
+            setShowPromoBanner(true);
+          } else {
+            console.log('No active banner found');
+          }
+        } else {
+          console.error('Failed to load banner:', response.status);
+        }
+      } catch (error) {
+        console.error('Error loading banner:', error);
+      }
+    };
+    
+    // עיכוב קטן כדי לוודא שהדף נטען
+    const timer = setTimeout(() => {
+      loadBanner();
+    }, 100);
+    
+    return () => clearTimeout(timer);
+  }, []);
+
+  const handleCloseBanner = () => {
+    // סוגרים את הבאנר - יופיע שוב ברענון הבא
+    setShowPromoBanner(false);
+  };
 
   // Group products by category
   const sets = allProducts.filter(p => p.category === 'sets' || p.category === 'מארזים' || p.category === 'general');
@@ -2108,35 +2580,34 @@ export default function LuxceraLanding() {
   }
 
   return (
-    <div dir="rtl" className="min-h-screen bg-ivory">
-      <PromoBanner />
-      <Nav onCartClick={handleCartClick} onUserClick={handleAccountClick} onSearchClick={handleSearchClick} cartCount={cartCount} isLoggedIn={isLoggedIn} userName={userName} />
-      <SearchModal isOpen={searchOpen} onClose={handleCloseSearch} products={allProducts} onAddToCart={handleAddToCart} />
+    <div dir="rtl" className="min-h-screen relative">
+      {/* רקע שקוף עם תמונת נר - בדף הראשי */}
+      <div 
+        className="fixed inset-0 pointer-events-none z-0"
+        style={{
+          backgroundImage: `url(${candleBg1})`,
+          backgroundSize: 'cover',
+          backgroundPosition: 'center',
+          backgroundRepeat: 'no-repeat',
+          opacity: 0.75,
+          filter: 'blur(10px) grayscale(0%)',
+          mixBlendMode: 'multiply'
+        }}
+        aria-hidden="true"
+      />
+      <div className="relative z-10">
+        <PromoBanner />
+        <Nav onCartClick={handleCartClick} onUserClick={handleAccountClick} onSearchClick={handleSearchClick} cartCount={cartCount} isLoggedIn={isLoggedIn} userName={userName} />
+        <SearchModal isOpen={searchOpen} onClose={handleCloseSearch} products={allProducts} onAddToCart={handleAddToCart} />
       <AccountModal 
         isOpen={accountOpen} 
         onClose={handleCloseAccount} 
-        isLoggedIn={isLoggedIn} 
         showCartMessage={pendingCartOpen}
-        setIsLoggedIn={(loggedIn) => {
-          setIsLoggedIn(loggedIn);
-          if (!loggedIn) {
-            setUserName(''); // איפוס שם המשתמש בהתנתקות
-          }
-          // אם המשתמש התחבר ואמור לפתוח עגלה - פותחים אותה
-          if (loggedIn && pendingCartOpen) {
-            setPendingCartOpen(false);
-            setAccountOpen(false);
-            // פתיחת העגלה אחרי זמן קצר כדי שהמודאל יסגר קודם
-            setTimeout(() => {
-              setCartOpen(true);
-            }, 300);
-          }
-        }}
         onLoginSuccess={(name) => {
           setUserName(name);
         }}
       />
-      <CartModal isOpen={cartOpen} onClose={handleCloseCart} cart={cart} onUpdateQuantity={handleUpdateQuantity} onRemoveItem={handleRemoveItem} onCheckout={handleCheckout} />
+      <CartModal isOpen={cartOpen} onClose={handleCloseCart} cart={cart} onUpdateQuantity={handleUpdateQuantity} onRemoveItem={handleRemoveItem} onCheckout={handleCheckout} isLoggedIn={isLoggedIn} />
       <CheckoutModal
         isOpen={checkoutOpen}
         onClose={handleCloseCheckout}
@@ -2156,18 +2627,36 @@ export default function LuxceraLanding() {
         sets={sets} 
         waxPearls={waxPearls} 
         accessories={accessories} 
+        id="קטגוריות"
       />
 
       <Gallery />
-      <Section id="gift-card" className="py-16 bg-ivory">
+      <Section id="gift-card" className="py-16">
         <div className="text-center mb-8">
-          <h2 className="text-4xl font-bold text-gray-900 mb-4" style={{ fontFamily: 'serif' }}>לרכישת כרטיס קוד קופון/GIFT CARD</h2>
+          <h2 
+            className="text-4xl font-bold mb-4"
+            style={{
+              color: '#D4AF37',
+              fontFamily: 'serif',
+              textShadow: '3px 3px 0px rgba(0, 0, 0, 0.3), 6px 6px 10px rgba(0, 0, 0, 0.2), 0 0 20px rgba(212, 175, 55, 0.5)',
+              letterSpacing: '0.05em'
+            }}
+          >
+            לרכישת כרטיס קוד קופון/GIFT CARD
+          </h2>
         </div>
         <GiftCardEntryButton />
       </Section>
       <About />
+      <LoyaltyClubSection onAccountClick={handleAccountClick} />
       <Footer />
       <AccessibilityWidget />
+      </div>
+      
+      {/* Promotional Banner Modal */}
+      {showPromoBanner && promoBanner && (
+        <PromoBannerModal banner={promoBanner} onClose={handleCloseBanner} />
+      )}
     </div>
   );
 }

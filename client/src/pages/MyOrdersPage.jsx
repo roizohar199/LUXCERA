@@ -27,6 +27,12 @@ function MyOrdersPage() {
   const [error, setError] = React.useState(null);
   const [userName, setUserName] = React.useState('');
 
+  // תאום מצב התחברות גם אם הגעת מהדף הראשי שלא משתמש ב-AppContext
+  const storedIsLoggedIn = typeof window !== 'undefined' && localStorage.getItem('luxcera_isLoggedIn') === 'true';
+  const storedEmail = typeof window !== 'undefined' ? (localStorage.getItem('luxcera_userEmail') || '') : '';
+  const effectiveIsLoggedIn = isLoggedIn || storedIsLoggedIn;
+  const emailToUse = userEmail || storedEmail;
+
   // טעינת שם משתמש מ-localStorage
   React.useEffect(() => {
     const savedUserName = localStorage.getItem('luxcera_userName');
@@ -38,7 +44,7 @@ function MyOrdersPage() {
   // טעינת הזמנות מהשרת
   React.useEffect(() => {
     const loadOrders = async () => {
-      if (!isLoggedIn || !userEmail) {
+      if (!effectiveIsLoggedIn || !emailToUse) {
         setLoading(false);
         return;
       }
@@ -46,7 +52,7 @@ function MyOrdersPage() {
       try {
         setLoading(true);
         setError(null);
-        const response = await fetch(getApiUrl(`/api/orders/user/${encodeURIComponent(userEmail)}`), {
+        const response = await fetch(getApiUrl(`/api/orders/user/${encodeURIComponent(emailToUse)}`), {
           credentials: 'include',
         });
 
@@ -69,10 +75,10 @@ function MyOrdersPage() {
     };
 
     loadOrders();
-  }, [isLoggedIn, userEmail]);
+  }, [effectiveIsLoggedIn, emailToUse]);
 
   // אם המשתמש לא מחובר, הפנה לדף הבית
-  if (!isLoggedIn) {
+  if (!effectiveIsLoggedIn) {
     return (
       <Layout
         onUserClick={() => navigate('/')}
@@ -123,7 +129,7 @@ function MyOrdersPage() {
       onUserClick={() => navigate('/')}
       onSearchClick={() => navigate('/')}
       cartCount={0}
-      isLoggedIn={isLoggedIn}
+      isLoggedIn={effectiveIsLoggedIn}
       userName={userName}
     >
       <div className="min-h-screen bg-ivory pt-20 pb-16">

@@ -1,6 +1,7 @@
 import React from 'react';
 import { motion } from 'framer-motion';
 import { X, Plus, Minus, Trash2 } from 'lucide-react';
+import { useApp } from '../context/AppContext';
 
 // Base API URL helper
 const getApiUrl = (path) => {
@@ -16,10 +17,13 @@ const getApiUrl = (path) => {
   return `${baseUrl}${cleanPath}`;
 };
 
-function CartModal({ isOpen, onClose, cart, onUpdateQuantity, onRemoveItem, onCheckout }) {
+function CartModal({ isOpen, onClose, cart, onUpdateQuantity, onRemoveItem, onCheckout, isLoggedIn }) {
+  const { getCartTotal, giftCardAmount, promoAmount, getFinalTotal } = useApp();
+  
   if (!isOpen) return null;
 
-  const cartTotal = cart.reduce((sum, item) => sum + (Number(item.price) * item.quantity), 0);
+  const cartTotal = getCartTotal();
+  const finalTotal = getFinalTotal(0); // ללא משלוח במודאל העגלה
   const isEmpty = cart.length === 0;
 
   return (
@@ -37,10 +41,12 @@ function CartModal({ isOpen, onClose, cart, onUpdateQuantity, onRemoveItem, onCh
           {isEmpty ? (
             <div className="text-center py-12">
               <h3 className="text-2xl font-bold text-gray-900 mb-4">העגלה שלך ריקה</h3>
-              <p className="text-gray-600 mb-2">
-                יש לך חשבון?
-                <a href="#" className="underline font-medium hover:text-gray-900"> התחבר</a> כדי להזמין מהר יותר.
-              </p>
+              {!isLoggedIn && (
+                <p className="text-gray-600 mb-2">
+                  יש לך חשבון?
+                  <a href="#" className="underline font-medium hover:text-gray-900"> התחבר</a> כדי להזמין מהר יותר.
+                </p>
+              )}
               <button onClick={onClose} className="mt-6 w-full bg-gold hover:bg-gold/90 text-black-lux px-6 py-3 rounded-lg font-semibold transition-colors">
                 המשך לקניות
               </button>
@@ -96,9 +102,27 @@ function CartModal({ isOpen, onClose, cart, onUpdateQuantity, onRemoveItem, onCh
 
         {!isEmpty && (
           <div className="border-t p-6 bg-white flex-shrink-0">
-            <div className="flex justify-between items-center mb-4">
-              <span className="text-gray-700 font-semibold">סה"כ</span>
-              <span className="text-2xl font-bold text-gray-900">₪{cartTotal.toFixed(2)}</span>
+            <div className="space-y-2 mb-4">
+              <div className="flex justify-between items-center">
+                <span className="text-gray-700 font-semibold">סה"כ מוצרים</span>
+                <span className="text-gray-900 font-semibold">₪{cartTotal.toFixed(2)}</span>
+              </div>
+              {giftCardAmount > 0 && (
+                <div className="flex justify-between items-center text-green-600">
+                  <span className="text-sm">Gift Card</span>
+                  <span className="text-sm font-semibold">-₪{giftCardAmount.toFixed(2)}</span>
+                </div>
+              )}
+              {promoAmount > 0 && (
+                <div className="flex justify-between items-center text-green-600">
+                  <span className="text-sm">קוד מבצע</span>
+                  <span className="text-sm font-semibold">-₪{promoAmount.toFixed(2)}</span>
+                </div>
+              )}
+              <div className="border-t pt-2 flex justify-between items-center">
+                <span className="text-gray-900 font-semibold">סה"כ לתשלום</span>
+                <span className="text-2xl font-bold text-gray-900">₪{finalTotal.toFixed(2)}</span>
+              </div>
             </div>
             <button
               onClick={() => { onClose(); onCheckout?.(); }}

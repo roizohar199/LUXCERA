@@ -17,7 +17,12 @@ function ContactPage() {
       setUserName(savedUserName);
     }
   }, []);
-  
+
+  // Scroll to top כשנכנסים לדף יצירת קשר
+  React.useEffect(() => {
+    window.scrollTo({ top: 0, behavior: 'instant' });
+  }, []);
+
   const handleUserClick = () => navigate('/');
   const handleSearchClick = () => navigate('/');
 

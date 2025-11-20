@@ -16,17 +16,24 @@ router.post(
   asyncHandler(async (req: Request, res: Response) => {
     const { username, password } = req.body;
 
+    logger.info('Login attempt', { username, hasPassword: !!password });
+
     if (!username || !password) {
+      logger.warn('Login attempt failed', { username, reason: 'Missing username or password' });
       return res.status(400).json({ ok: false, error: 'Username and password required' });
     }
 
     const user = await adminUsers.findByUsername(username);
+    logger.info('User lookup result', { username, userFound: !!user, userId: user?.id });
+    
     if (!user) {
       logger.warn('Login attempt failed', { username, reason: 'User not found' });
       return res.status(401).json({ ok: false, error: 'Invalid credentials' });
     }
 
     const isValid = await adminUsers.verifyPassword(password, user.passwordHash);
+    logger.info('Password verification result', { username, isValid });
+    
     if (!isValid) {
       logger.warn('Login attempt failed', { username, reason: 'Invalid password' });
       return res.status(401).json({ ok: false, error: 'Invalid credentials' });

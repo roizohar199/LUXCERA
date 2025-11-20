@@ -198,6 +198,23 @@ body.large-cursor textarea {
   border: 1px solid rgba(255, 255, 255, 0.2);
 }
 
+/* New Badge - Ribbon Style יוקרתי */
+.new-ribbon {
+  position: absolute;
+  top: 10px;
+  right: -35px;
+  background: linear-gradient(45deg, #4A90E2, #357ABD);
+  color: #fff;
+  font-weight: 700;
+  padding: 5px 40px;
+  transform: rotate(45deg);
+  font-size: 0.8rem;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3), 0 0 10px rgba(74, 144, 226, 0.3);
+  z-index: 10;
+  letter-spacing: 0.05em;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
 /* Sale Badge - Corner Style אלגנטי */
 .sale-badge-corner {
   position: absolute;

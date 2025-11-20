@@ -1,0 +1,37 @@
+## LUXCERA – ARCHITECTURE
+- Mono-repo: root/, client/ (React+Vite), server/ (Express).
+- אין לשנות מבנה תיקיות.
+- תמיד להחזיר קבצים מלאים עם imports.
+
+## BACKEND – Express
+- ENV נטען מ-/server/.env.
+- אין לחשוף מפתחות (Bit, WhatsApp, MySQL).
+- כל Route עטוף try/catch ומחזיר JSON צורה אחידה.
+- שימוש ב-connection pool ו-prepared statements.
+
+## FRONTEND – React/Vite
+- קומפוננטות פונקציונליות בלבד.
+- שימוש ב-state הקיים.
+- API דרך axios/fetch ל-/api.
+
+## CART STRUCTURE
+{id, name, price, originalPrice, salePrice, quantity, inStock}
+- אסור לשנות שמות שדות.
+
+## CHECKOUT FLOW
+- POST /api/orders → שמירת הזמנה ב-MySQL → החזרת URL לסליקה חיצונית → Redirect מהלקוח.
+
+## WhatsApp API
+- שימוש ב-SMS_SERVICE=whatsapp + WHATSAPP_API_KEY.
+
+## DEVOPS
+- PM2: luxcera-server.
+- Build: client/dist.
+- Nginx: הגשה סטטית + proxy_pass ל-Node.
+
+## DEPLOY
+- git pull → npm install → build → pm2 restart.
+
+## STYLE
+- קוד מלא בלבד, לא חלקי. כל קובץ מוחלף כיחידה שלמה.
+

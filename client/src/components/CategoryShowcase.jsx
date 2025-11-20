@@ -7,7 +7,7 @@ import accessoriesBg from '../assets/2-99cd7c1d.png';
 import giftPackageBg from '../assets/gift-package.png';
 import bestPriceBg from '../assets/best-price.png';
 
-function CategoryShowcase({ sets, waxPearls, accessories }) {
+function CategoryShowcase({ sets, waxPearls, accessories, id = 'קטגוריות' }) {
   const navigate = useNavigate();
 
   const categories = [
@@ -26,11 +26,11 @@ function CategoryShowcase({ sets, waxPearls, accessories }) {
       description: 'פניני שעווה ריחניות בעבודת יד',
     },
     {
-      title: 'אביזרים',
+      title: 'נרות אור ויוקרה',
       route: '/category/accessories',
       bgImage: accessoriesBg, // תמונה מ-assets
       icon: null, // ללא אייקון
-      description: 'אביזרים משלימים לנרות',
+      description: 'נרות אור ויוקרה',
     },
   ];
 
@@ -43,17 +43,17 @@ function CategoryShowcase({ sets, waxPearls, accessories }) {
     description: ['הנרות מתחממים והמחירים נמסים', 'מבצעים שידליקו לכם את האווירה'],
   };
 
-  // קטגוריית מארזי מתנה - לכל הרוחב
+  // קטגוריית מוצרי מתנה - לכל הרוחב
   const giftPackagesCategory = {
-    title: 'מארזי מתנה',
+    title: 'מוצרי מתנה',
     route: '/category/gift-packages',
     bgImage: giftPackageBg,
     icon: null,
-    description: 'מארזי מתנה מושלמים לכל אירוע',
+    description: 'מוצרי מתנה מושלמים לכל אירוע',
   };
 
   return (
-    <Section className="py-16 bg-ivory">
+    <Section id={id} className="py-16">
       {/* קטגוריית מבצעים - עיצוב Modern Motion */}
       <motion.div
         initial={{ opacity: 0, y: 30 }}
@@ -146,7 +146,7 @@ function CategoryShowcase({ sets, waxPearls, accessories }) {
         ))}
       </div>
 
-      {/* קטגוריית מארזי מתנה - לכל הרוחב, סימטרית לשלוש הקטגוריות מעליה */}
+      {/* קטגוריית מוצרי מתנה - לכל הרוחב, סימטרית לשלוש הקטגוריות מעליה */}
       <motion.div
         initial={{ opacity: 0, y: 30 }}
         whileInView={{ opacity: 1, y: 0 }}
