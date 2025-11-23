@@ -4,18 +4,12 @@ import { Gift, Star, CheckCircle } from 'lucide-react';
 export default function GiftCardPurchase({ onAddToCart }) {
   const [selectedAmount, setSelectedAmount] = useState(100);
   const [quantity, setQuantity] = useState(1);
-  const [email, setEmail] = useState('');
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(false);
 
   const amounts = [100, 200, 300, 400];
 
   const handleAddToCart = async () => {
-    if (!email || !email.includes('@')) {
-      setError('אנא הכנס אימייל תקין');
-      return;
-    }
-
     setError(null);
 
     // יצירת אובייקט Gift Card כמו מוצר רגיל
@@ -28,7 +22,6 @@ export default function GiftCardPurchase({ onAddToCart }) {
       imageUrl: null,
       inStock: true,
       isGiftCard: true, // סימון שזה Gift Card
-      giftCardEmail: email, // שמירת האימייל
       giftCardAmount: selectedAmount, // שמירת הסכום
     };
 
@@ -53,7 +46,6 @@ export default function GiftCardPurchase({ onAddToCart }) {
         setSuccess(true);
         setTimeout(() => {
           setSuccess(false);
-          setEmail('');
           setQuantity(1);
           setSelectedAmount(100);
         }, 2000);
@@ -122,20 +114,8 @@ export default function GiftCardPurchase({ onAddToCart }) {
             </div>
           </div>
 
-          {/* Email, Quantity and Purchase */}
+          {/* Quantity and Purchase */}
           <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">אימייל לקבלת הקוד</label>
-              <input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="your@email.com"
-                className="w-full max-w-xs border border-sage/40 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-gold/20 focus:border-gold"
-                required
-              />
-            </div>
-
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">כמות</label>
               <input
@@ -162,12 +142,7 @@ export default function GiftCardPurchase({ onAddToCart }) {
             <div className="flex flex-col items-center gap-4">
               <button
                 onClick={handleAddToCart}
-                disabled={!email || !email.includes('@')}
-                className={`w-full max-w-xs py-3 rounded-lg font-semibold text-lg transition-colors ${
-                  !email || !email.includes('@')
-                    ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                    : 'bg-gold text-black-lux hover:bg-gold/90 border-2 border-gold shadow-gold'
-                }`}
+                className="w-full max-w-xs py-3 rounded-lg font-semibold text-lg transition-colors bg-gold text-black-lux hover:bg-gold/90 border-2 border-gold shadow-gold"
               >
                 הוספה לסל
               </button>

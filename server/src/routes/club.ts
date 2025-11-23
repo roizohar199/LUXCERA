@@ -9,8 +9,22 @@ import {
   deactivateMember,
   activateMember,
 } from "../models/loyalty.js";
+import { users } from "../db.js";
+import pool from "../db.js";
+import nodemailer, { Transporter } from "nodemailer";
+import { sanitizeForEmail } from "../security.js";
 
 const router = express.Router();
+
+// Email transporter
+function createTransporter(): Transporter {
+  return nodemailer.createTransport({
+    host: process.env.SMTP_HOST,
+    port: Number(process.env.SMTP_PORT || 465),
+    secure: String(process.env.SMTP_SECURE ?? 'true') === 'true',
+    auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
+  });
+}
 
 // Helper לשליפת userId בצורה בטוחה מכל המבנה של האותנטיקציה
 function getUserId(req: AuthRequest): number | null {
@@ -48,6 +62,47 @@ router.post("/join", requireAuth, async (req: AuthRequest, res: Response) => {
       phone: phone || null,
       marketingOptIn: Boolean(marketingOptIn),
     });
+
+    // שליחת מייל למנהל אדמין על הצטרפות חדשה למועדון
+    try {
+      // קבלת פרטי המשתמש מה-DB
+      const [userRows] = await pool.query('SELECT * FROM users WHERE id = ?', [userId]) as [any[], any];
+      const user = userRows && userRows.length > 0 ? userRows[0] : null;
+      
+      if (user) {
+        const transporter = createTransporter();
+        const ADMIN_EMAIL = process.env.EMAIL_ADMIN || 'LUXCERA777@GMAIL.COM';
+
+        const adminHtml = `
+          <div style="font-family: Arial, sans-serif; text-align: right; direction: rtl; padding: 20px; background-color: #f9fafb;">
+            <div style="max-width: 600px; margin: 0 auto; background-color: white; border-radius: 8px; padding: 30px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+              <h2 style="color: #333; font-size: 24px; margin-bottom: 20px;">חבר חדש הצטרף למועדון הלקוחות! 🎉</h2>
+              <p style="color: #666; font-size: 16px; line-height: 1.6; margin: 0;">
+                <b>שם מלא:</b> ${sanitizeForEmail(user.full_name || 'לא צוין')}<br>
+                <b>אימייל:</b> ${sanitizeForEmail(user.email || 'לא צוין')}<br>
+                ${phone ? `<b>טלפון:</b> ${sanitizeForEmail(phone)}<br>` : ''}
+                ${birthday ? `<b>תאריך לידה:</b> ${sanitizeForEmail(birthday)}<br>` : ''}
+                <b>תאריך הצטרפות:</b> ${new Date().toLocaleString('he-IL')}<br>
+                <b>מתנת הצטרפות:</b> 50 נקודות (₪50)
+              </p>
+            </div>
+          </div>
+        `;
+
+        await transporter.sendMail({
+          from: process.env.EMAIL_FROM,
+          to: ADMIN_EMAIL,
+          subject: 'LUXCERA – חבר חדש הצטרף למועדון הלקוחות',
+          html: adminHtml,
+        }).catch((emailError) => {
+          console.error('Failed to send admin notification email for club join:', emailError);
+          // Don't fail the join if email fails
+        });
+      }
+    } catch (emailError) {
+      console.error('Error sending admin email for club join:', emailError);
+      // Don't fail the join if email fails
+    }
 
     res.json({ member });
   } catch (err) {

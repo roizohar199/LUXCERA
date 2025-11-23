@@ -4,6 +4,7 @@ import { useApp } from '../context/AppContext';
 import Layout from '../components/Layout';
 import Footer from '../components/Footer';
 import ProductsCarousel from '../components/ProductsCarousel';
+import { ArrowRight } from 'lucide-react';
 import bestPriceImage from '../assets/best-price - Copy.png';
 
 // Base API URL helper
@@ -120,9 +121,14 @@ function CategoryPage() {
             <h1 className="text-4xl font-bold text-gray-900 mb-4">קטגוריה לא נמצאה</h1>
             <button
               onClick={() => navigate('/')}
-              className="bg-gold text-black-lux px-6 py-3 rounded-lg font-semibold hover:bg-gold/90 transition-colors"
+              className="group relative inline-flex items-center gap-3 px-6 py-3 bg-gradient-to-r from-gold/20 via-gold/30 to-gold/20 border-2 border-gold/50 rounded-lg shadow-lg hover:shadow-gold transition-all duration-300 hover:scale-105"
             >
-              חזרה לדף הבית
+              <div className="absolute inset-0 bg-gradient-to-r from-gold/10 via-transparent to-gold/10 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+              <ArrowRight className="w-5 h-5 text-gold group-hover:translate-x-1 transition-transform duration-300 relative z-10" />
+              <span className="text-gold font-semibold text-lg relative z-10 group-hover:text-gold/90 transition-colors duration-300" style={{ fontFamily: 'serif' }}>
+                חזרה לדף הבית
+              </span>
+              <div className="absolute -inset-1 bg-gold/20 rounded-lg blur opacity-0 group-hover:opacity-100 transition-opacity duration-300 -z-10"></div>
             </button>
           </div>
         </div>
@@ -171,6 +177,31 @@ function CategoryPage() {
           />
         )}
         <div className="relative z-10">
+          {/* כפתור חזרה */}
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mb-4">
+            {['accessories', 'sets', 'wax-pearls', 'gift-packages', 'sales'].includes(category) ? (
+              <button 
+                onClick={() => navigate('/')} 
+                className="group relative inline-flex items-center gap-3 px-6 py-3 bg-gradient-to-r from-gold/20 via-gold/30 to-gold/20 border-2 border-gold/50 rounded-lg shadow-lg hover:shadow-gold transition-all duration-300 hover:scale-105"
+              >
+                <div className="absolute inset-0 bg-gradient-to-r from-gold/10 via-transparent to-gold/10 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+                <ArrowRight className="w-5 h-5 text-gold group-hover:translate-x-1 transition-transform duration-300 relative z-10" />
+                <span className="text-gold font-semibold text-lg relative z-10 group-hover:text-gold/90 transition-colors duration-300" style={{ fontFamily: 'serif' }}>
+                  חזרה לדף הבית
+                </span>
+                <div className="absolute -inset-1 bg-gold/20 rounded-lg blur opacity-0 group-hover:opacity-100 transition-opacity duration-300 -z-10"></div>
+              </button>
+            ) : (
+              <button 
+                onClick={() => navigate('/')} 
+                className="flex items-center gap-2 text-gray-700 hover:text-gray-900 transition-colors"
+              >
+                <ArrowRight className="w-5 h-5" />
+                <span>חזרה לדף הבית</span>
+              </button>
+            )}
+          </div>
+          
           {loadingProducts ? (
             <div className="flex items-center justify-center min-h-[400px]">
               <div className="text-center">

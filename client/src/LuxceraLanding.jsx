@@ -1485,6 +1485,7 @@ function CheckoutModal({ isOpen, onClose, cart, onOrderComplete }) {
   const [showCitySuggestions, setShowCitySuggestions] = React.useState(false);
   const cityInputRef = React.useRef(null);
   const [validationErrors, setValidationErrors] = React.useState({});
+  const [agreedToTerms, setAgreedToTerms] = React.useState(false);
 
   // שמירת הקרט המקורי - כדי שלא יאבד כשהקרט מתרוקן אחרי יצירת ההזמנה
   const [savedCart, setSavedCart] = React.useState([]);
@@ -1516,17 +1517,29 @@ function CheckoutModal({ isOpen, onClose, cart, onOrderComplete }) {
   }, [cartToUse]);
 
   const shippingFee = React.useMemo(() => {
+    // בדיקה אם כל הפריטים בעגלה הם Gift Cards - אם כן, אין עלות משלוח
+    const isOnlyGiftCards = cartToUse.length > 0 && cartToUse.every(item => item.isGiftCard === true);
+    
+    // אם כל הפריטים הם Gift Cards, אין עלות משלוח. אחרת, חישוב רגיל
+    if (isOnlyGiftCards) {
+      return 0;
+    }
+    
     const fee = cartTotal >= 300 ? 0 : 30;
     return fee;
-  }, [cartTotal]);
+  }, [cartTotal, cartToUse]);
 
-  // שימוש ב-getFinalTotal מה-AppContext לחישוב הסכום הסופי
+  // חישוב הסכום הסופי - משתמש ב-cartTotal המקומי (מ-cartToUse) ולא מה-AppContext
   const finalTotal = React.useMemo(() => {
-    return getFinalTotal(shippingFee);
-  }, [getFinalTotal, shippingFee]);
+    const subtotal = cartTotal;
+    const total = subtotal + shippingFee - giftCardAmount - promoAmount;
+    return Math.max(0, total); // לא פחות מ-0
+  }, [cartTotal, shippingFee, giftCardAmount, promoAmount]);
 
   React.useEffect(() => {
-    if (!isOpen) {
+    // אם המודל נסגר וההזמנה לא הושלמה, מאפסים את כל ה-states
+    // אבל אם ההזמנה הושלמה (יש orderId), לא מאפסים כדי שה-POP UP יישאר פתוח
+    if (!isOpen && !(isComplete && orderSaved && orderId)) {
       setStep(1);
       setIsComplete(false);
       setIsProcessing(false);
@@ -1538,9 +1551,10 @@ function CheckoutModal({ isOpen, onClose, cart, onOrderComplete }) {
       setCitySuggestions([]);
       setShowCitySuggestions(false);
       setValidationErrors({});
+      setAgreedToTerms(false);
       clearDiscounts(); // מנקים הנחות כשהמודאל נסגר
     }
-  }, [isOpen, clearDiscounts]);
+  }, [isOpen, isComplete, orderSaved, orderId, clearDiscounts]);
 
   // פונקציה לסינון ערים לפי הקלדה
   const handleCityInputChange = (e) => {
@@ -1599,12 +1613,18 @@ function CheckoutModal({ isOpen, onClose, cart, onOrderComplete }) {
       errors.phone = 'מספר טלפון לא תקין';
     }
     
-    if (!shippingData.address || shippingData.address.trim() === '') {
-      errors.address = 'כתובת משלוח נדרשת';
-    }
+    // בדיקה אם כל הפריטים בעגלה הם Gift Cards - אם כן, לא צריך address ו-city
+    const isOnlyGiftCards = cartToUse.length > 0 && cartToUse.every(item => item.isGiftCard === true);
     
-    if (!shippingData.city || shippingData.city.trim() === '') {
-      errors.city = 'עיר נדרשת';
+    // address ו-city נדרשים רק אם יש מוצרים רגילים (לא Gift Cards בלבד)
+    if (!isOnlyGiftCards) {
+      if (!shippingData.address || shippingData.address.trim() === '') {
+        errors.address = 'כתובת משלוח נדרשת';
+      }
+      
+      if (!shippingData.city || shippingData.city.trim() === '') {
+        errors.city = 'עיר נדרשת';
+      }
     }
     
     // מיקוד לא חובה - לא בודקים אותו
@@ -1659,14 +1679,31 @@ function CheckoutModal({ isOpen, onClose, cart, onOrderComplete }) {
       return;
     }
     
+    // בדיקה שהמשתמש הסכים לתנאי השימוש ומדיניות הפרטיות
+    if (!agreedToTerms) {
+      setSaveError('יש לאשר את תנאי השימוש ומדיניות הפרטיות כדי להמשיך');
+      return;
+    }
+    
     setIsProcessing(true);
     setSaveError(null);
     
     try {
       // שליחת ההזמנה לשרת
       // מוודאים שכל הנתונים עם הטיפוסים הנכונים
+      
+      // בדיקה אם כל הפריטים בעגלה הם Gift Cards - אם כן, לא צריך address ו-city
+      const isOnlyGiftCards = cartToUse.length > 0 && cartToUse.every(item => item.isGiftCard === true);
+      
+      // הכנת shippingData - עבור Gift Cards בלבד, address ו-city יכולים להיות null
+      const shippingDataForOrder = {
+        ...shippingData,
+        address: isOnlyGiftCards ? null : (shippingData.address || null),
+        city: isOnlyGiftCards ? null : (shippingData.city || null),
+      };
+      
       const orderData = {
-        shippingData,
+        shippingData: shippingDataForOrder,
         paymentData: {
           paymentMethod: 'bit',
         },
@@ -1706,6 +1743,8 @@ function CheckoutModal({ isOpen, onClose, cart, onOrderComplete }) {
         setOrderSaved(true);
         setOrderId(data.orderId);
         setIsComplete(true);
+        // לא מאפסים את agreedToTerms כאן כי אנחנו רוצים שה-POP UP יופיע
+        // אבל נאפס אותו כשסוגרים את ה-POP UP כדי שבעסקה הבאה התיבה תופיע שוב
         onOrderComplete?.({ shippingData, paymentData, cart: cartToUse, total: finalTotal, orderId: data.orderId });
       } else {
         setSaveError(data.error || 'שגיאה בשמירת ההזמנה');
@@ -1718,9 +1757,9 @@ function CheckoutModal({ isOpen, onClose, cart, onOrderComplete }) {
     }
   };
 
-  if (!isOpen) return null;
-
-  if (isComplete && orderSaved) {
+  // אם ההזמנה הושלמה בהצלחה, מציגים את ה-POP UP גם אם המודל נסגר
+  // חשוב: ה-POP UP יופיע גם אם המודל נסגר, כל עוד ההזמנה הושלמה
+  if (isComplete && orderSaved && orderId) {
     return (
       <div className="fixed inset-0 z-50 flex items-center justify-center">
         <div className="absolute inset-0 bg-black/50"></div>
@@ -1750,11 +1789,22 @@ function CheckoutModal({ isOpen, onClose, cart, onOrderComplete }) {
             </div>
           </div>
           
-          <button onClick={onClose} className="w-full bg-[#40E0D0] hover:bg-[#30D5C8] text-white px-6 py-3 rounded-lg font-semibold transition-colors">סגור</button>
+          <button onClick={() => {
+            // כשסוגרים את ה-POP UP, מאפסים את כל ה-states כולל אישור תנאי השימוש
+            // כך שבעסקה הבאה התיבה תופיע שוב
+            setIsComplete(false);
+            setOrderSaved(false);
+            setOrderId(null);
+            setAgreedToTerms(false); // מאפסים את אישור תנאי השימוש כדי שבעסקה הבאה התיבה תופיע שוב
+            onClose();
+          }} className="w-full bg-[#40E0D0] hover:bg-[#30D5C8] text-white px-6 py-3 rounded-lg font-semibold transition-colors">סגור</button>
         </motion.div>
       </div>
     );
   }
+
+  // אם המודל לא פתוח, לא מציגים כלום
+  if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto py-8">
@@ -1764,14 +1814,20 @@ function CheckoutModal({ isOpen, onClose, cart, onOrderComplete }) {
         <div className="sticky top-0 bg-white border-b p-6 rounded-t-lg z-10">
           <div className="flex justify-between items-center mb-4">
             <h2 className="text-2xl font-bold text-gray-900">תשלום מאובטח</h2>
-            {step > 1 && (
-              <button type="button" onClick={() => setStep(step - 1)} className="text-[#40E0D0] hover:text-[#30D5C8] flex items-center gap-2">
-                <ChevronRight className="w-5 h-5" /> חזרה
+            <div className="flex items-center gap-4">
+              {step > 1 ? (
+                <button type="button" onClick={() => setStep(step - 1)} className="text-[#40E0D0] hover:text-[#30D5C8] flex items-center gap-2">
+                  <ChevronRight className="w-5 h-5" /> חזרה
+                </button>
+              ) : (
+                <button type="button" onClick={onClose} className="text-gray-600 hover:text-gray-900 flex items-center gap-2">
+                  <ChevronRight className="w-5 h-5" /> חזרה
+                </button>
+              )}
+              <button onClick={onClose} className="text-gray-400 hover:text-gray-900" aria-label="סגור">
+                <X className="w-6 h-6" />
               </button>
-            )}
-            <button onClick={onClose} className="text-gray-400 hover:text-gray-900" aria-label="סגור">
-              <X className="w-6 h-6" />
-            </button>
+            </div>
           </div>
 
           <div className="flex items-center justify-center gap-4">
@@ -1796,12 +1852,24 @@ function CheckoutModal({ isOpen, onClose, cart, onOrderComplete }) {
           </div>
         </div>
 
-        <div className="p-6">
+        <div className="p-6 flex flex-col" style={{ maxHeight: 'calc(90vh - 150px)' }}>
           {step === 1 && (
             <form onSubmit={handleShippingSubmit} className="space-y-6">
-              <h3 className="text-xl font-bold text-gray-900 mb-6 flex items-center gap-2">
+              <h3 className="text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
                 <MapPin className="w-6 h-6" /> פרטי משלוח
               </h3>
+
+              <div className="bg-blue-50 border-r-4 border-blue-400 rounded-lg p-4 mb-6">
+                <div className="flex items-start gap-3">
+                  <Truck className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <p className="text-blue-800 font-semibold text-sm mb-1">זמן אספקה</p>
+                    <p className="text-blue-700 text-sm">
+                      זמן האספקה הוא בין 5 ל-14 ימי עסקים ממועד ביצוע ההזמנה והעברת התשלום.
+                    </p>
+                  </div>
+                </div>
+              </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
@@ -1966,7 +2034,8 @@ function CheckoutModal({ isOpen, onClose, cart, onOrderComplete }) {
           )}
 
           {step === 3 && (
-            <div className="space-y-6 max-h-[calc(90vh-200px)] overflow-y-auto">
+            <div className="flex flex-col flex-1 min-h-0">
+              <div className="flex-1 overflow-y-auto space-y-6 pr-2 mb-4" style={{ scrollbarWidth: 'thin' }}>
               <h3 className="text-xl font-bold text-gray-900 mb-6">סיכום הזמנה</h3>
 
               <div className="border border-gray-200 rounded-lg p-4 bg-gray-50">
@@ -2076,8 +2145,37 @@ function CheckoutModal({ isOpen, onClose, cart, onOrderComplete }) {
                   <p className="text-red-800 text-sm">{saveError}</p>
                 </div>
               )}
+              </div>
 
-              <div className="flex gap-4 pt-4">
+              {/* Checkbox אישור תנאי שימוש ומדיניות פרטיות - מחוץ ל-overflow, תמיד גלוי בתחתית */}
+              <div className="border border-gray-200 rounded-lg p-4 bg-gray-50 flex-shrink-0">
+                <label className="flex items-start gap-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={agreedToTerms}
+                    onChange={(e) => {
+                      setAgreedToTerms(e.target.checked);
+                      if (saveError && e.target.checked) {
+                        setSaveError(null);
+                      }
+                    }}
+                    className="mt-1 w-5 h-5 text-[#40E0D0] border-gray-300 rounded focus:ring-[#40E0D0] focus:ring-2 cursor-pointer flex-shrink-0"
+                  />
+                  <span className="text-sm text-gray-700 flex-1">
+                    קראתי ואני מסכים ל-{' '}
+                    <Link to="/terms-of-service" target="_blank" className="underline font-semibold text-[#40E0D0] hover:text-[#30D5C8]" onClick={(e) => e.stopPropagation()}>
+                      תנאי שימוש
+                    </Link>
+                    {' '}ול-{' '}
+                    <Link to="/terms-of-service" target="_blank" className="underline font-semibold text-[#40E0D0] hover:text-[#30D5C8]" onClick={(e) => e.stopPropagation()}>
+                      מדיניות פרטיות
+                    </Link>
+                    {' '}ועיבוד המידע..*
+                  </span>
+                </label>
+              </div>
+
+              <div className="flex gap-4 pt-4 flex-shrink-0">
                 <button type="button" onClick={() => setStep(2)} className="flex-1 border border-gray-300 text-gray-700 hover:bg-gray-50 px-6 py-3 rounded-lg font-semibold transition-colors">חזרה</button>
                 <button onClick={handleCompleteOrder} disabled={isProcessing} className="flex-1 bg-[#40E0D0] hover:bg-[#30D5C8] text-white px-6 py-3 rounded-lg font-semibold transition-colors disabled:opacity-60 disabled:cursor-not-allowed">
                   {isProcessing ? 'מעבד הזמנה...' : 'אשר והזמן'}
@@ -2348,7 +2446,7 @@ function AccessibilityWidget() {
 
 export default function LuxceraLanding() {
   const navigate = useNavigate();
-  const { isLoggedIn, login, cart, addToCart, updateCartQuantity, removeFromCart, openCart, closeCart, isCartOpen } = useApp();
+  const { isLoggedIn, login, cart, addToCart, updateCartQuantity, removeFromCart, clearCart, openCart, closeCart, isCartOpen } = useApp();
   // בדיקה אם יש קישור Gift Card ב-URL
   const [giftCardCode, setGiftCardCode] = React.useState(() => {
     // בדיקה ראשונית של ה-URL
@@ -2375,6 +2473,7 @@ export default function LuxceraLanding() {
   const [pendingCartOpen, setPendingCartOpen] = React.useState(false); // האם צריך לפתוח עגלה אחרי התחברות
   const [promoBanner, setPromoBanner] = React.useState(null);
   const [showPromoBanner, setShowPromoBanner] = React.useState(false);
+  const [safetyModalOpen, setSafetyModalOpen] = React.useState(false);
 
   // טעינת מצב התחברות ושם משתמש מ-localStorage
   React.useEffect(() => {
@@ -2612,11 +2711,12 @@ export default function LuxceraLanding() {
         isOpen={checkoutOpen}
         onClose={handleCloseCheckout}
         cart={cart}
-        onOrderComplete={(orderData) => {
+        onOrderComplete={async (orderData) => {
           // מרוקנים את הסל רק אחרי שההזמנה הושלמה בהצלחה
           if (orderData && orderData.orderId) {
-            setCart([]);
-            localStorage.removeItem('luxcera_cart');
+            // שימוש ב-clearCart מה-AppContext כדי לנקות גם מהשרת (אם המשתמש מחובר)
+            await clearCart();
+            console.log('[LuxceraLanding] Cart cleared after order completion');
           }
           console.log('Order completed:', orderData);
         }}
@@ -2649,7 +2749,184 @@ export default function LuxceraLanding() {
       </Section>
       <About />
       <LoyaltyClubSection onAccountClick={handleAccountClick} />
-      <Footer />
+      
+      {/* מודל הוראות שימוש ואזהרה */}
+      {safetyModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" dir="rtl">
+          <div className="absolute inset-0 bg-black/80" onClick={() => setSafetyModalOpen(false)}></div>
+          <motion.div
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.9 }}
+            className="relative bg-gradient-to-b from-black via-black to-black/95 rounded-2xl shadow-2xl border-2 border-gold/30 w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col"
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between p-6 border-b border-gold/30 bg-black/50">
+              <div className="flex items-center gap-3">
+                <AlertTriangle className="w-8 h-8 text-gold" />
+                <h2 
+                  className="text-2xl md:text-3xl font-bold text-gold"
+                  style={{ fontFamily: 'serif' }}
+                >
+                  הוראות שימוש ואזהרה לנרות
+                </h2>
+              </div>
+              <button 
+                onClick={() => setSafetyModalOpen(false)}
+                className="text-gold/70 hover:text-gold transition-colors p-2 hover:bg-gold/10 rounded-lg"
+                aria-label="סגור"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+
+            {/* Content - Scrollable */}
+            <div className="flex-1 overflow-y-auto p-6 md:p-8">
+              <div className="space-y-6 text-gold/90 leading-relaxed">
+                <div className="bg-gold/10 rounded-lg p-6 border-r-4 border-gold">
+                  <p className="text-lg font-semibold text-gold mb-4" style={{ fontFamily: 'serif' }}>
+                    לקוח/ה יקר/ה
+                  </p>
+                  <p className="text-base md:text-lg">
+                    תודה שרכשתם מוצר מבית LUXCERA, חשוב מאוד שתקדישו מספר דקות לקרוא את הוראות השימוש והאזהרה לטובת בטיחות והנאה מרבית מהנרות והמוצרים שלנו.
+                  </p>
+                  <p className="text-base md:text-lg mt-4">
+                    אנו גאים מאוד במוצרים שאנחנו משווקים ומקפידים שיהיו על בסיס מרכיבים וחומרים איכותיים ביותר.
+                  </p>
+                </div>
+
+                <div className="space-y-4">
+                  <h3 className="text-xl font-bold text-gold mt-8 mb-4" style={{ fontFamily: 'serif' }}>
+                    הוראות בטיחות בסיסיות:
+                  </h3>
+                  
+                  <ul className="space-y-3 text-base md:text-lg">
+                    <li className="flex items-start gap-3">
+                      <CheckCircle className="w-5 h-5 text-gold flex-shrink-0 mt-1" />
+                      <span>הסירו את כל מרכיבי האריזה לפני ההדלקה.</span>
+                    </li>
+                    <li className="flex items-start gap-3">
+                      <CheckCircle className="w-5 h-5 text-gold flex-shrink-0 mt-1" />
+                      <span>יש להדליק נרות הנמצאים בטווח ראייה כל הזמן ועל משטח ישר ועמיד לחום.</span>
+                    </li>
+                    <li className="flex items-start gap-3">
+                      <CheckCircle className="w-5 h-5 text-gold flex-shrink-0 mt-1" />
+                      <span>הרחיקו את הנרות מילדים, חיות מחמד וחפצים דליקים.</span>
+                    </li>
+                    <li className="flex items-start gap-3">
+                      <CheckCircle className="w-5 h-5 text-gold flex-shrink-0 mt-1" />
+                      <span><strong className="text-gold">לעולם אל תשאיר נר דולק ללא השגחה.</strong></span>
+                    </li>
+                    <li className="flex items-start gap-3">
+                      <CheckCircle className="w-5 h-5 text-gold flex-shrink-0 mt-1" />
+                      <span>הימנעו מהדלקת נרות בסביבה עם רוח.</span>
+                    </li>
+                    <li className="flex items-start gap-3">
+                      <CheckCircle className="w-5 h-5 text-gold flex-shrink-0 mt-1" />
+                      <span>אין לגעת בזכוכית חמה על נר דולק או מתקרר.</span>
+                    </li>
+                    <li className="flex items-start gap-3">
+                      <CheckCircle className="w-5 h-5 text-gold flex-shrink-0 mt-1" />
+                      <span>אסור להזיז נר דולק או נר שהשעווה שלו עדיין נוזלית אחרי כיבוי.</span>
+                    </li>
+                    <li className="flex items-start gap-3">
+                      <CheckCircle className="w-5 h-5 text-gold flex-shrink-0 mt-1" />
+                      <span>יש לשמור על בריכת השעווה נקייה מפסולת מגזימות פתילות עץ או פתיל בד.</span>
+                    </li>
+                    <li className="flex items-start gap-3">
+                      <CheckCircle className="w-5 h-5 text-gold flex-shrink-0 mt-1" />
+                      <span>יש לשרוף נרות תמיד בחדר מאוורר היטב.</span>
+                    </li>
+                    <li className="flex items-start gap-3">
+                      <CheckCircle className="w-5 h-5 text-gold flex-shrink-0 mt-1" />
+                      <span>אסור לכבות נרות במים. אם מופיע עישון, יש לכבות את הנר, לחתוך את הפתילה ולהדליק שוב.</span>
+                    </li>
+                    <li className="flex items-start gap-3">
+                      <CheckCircle className="w-5 h-5 text-gold flex-shrink-0 mt-1" />
+                      <span>יש לטפל בצנצנת הזכוכית בזהירות.</span>
+                    </li>
+                    <li className="flex items-start gap-3">
+                      <CheckCircle className="w-5 h-5 text-gold flex-shrink-0 mt-1" />
+                      <span>אם הצנצנת שבורה, סדוקה או סדוקה, יש להפסיק את השימוש.</span>
+                    </li>
+                  </ul>
+                </div>
+
+                <div className="bg-red-900/30 border-2 border-red-500/50 rounded-lg p-6 mt-8">
+                  <div className="flex items-start gap-3">
+                    <AlertTriangle className="w-6 h-6 text-red-400 flex-shrink-0 mt-1" />
+                    <div>
+                      <p className="text-xl font-bold text-red-300 mb-2">
+                        חשוב מאוד !!!
+                      </p>
+                      <p className="text-base md:text-lg text-red-200">
+                        להפסיק את השימוש בנר כשנותר רק 1.5 ס"מ של שעווה מהתחתית. שריפה מעבר לנקודה זו עלולה להוות סכנת שריפה !!!
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-4 mt-8">
+                  <h3 className="text-xl font-bold text-gold mb-4" style={{ fontFamily: 'serif' }}>
+                    טיפים להדלקה נכונה:
+                  </h3>
+                  
+                  <ul className="space-y-3 text-base md:text-lg">
+                    <li className="flex items-start gap-3">
+                      <Info className="w-5 h-5 text-gold flex-shrink-0 mt-1" />
+                      <span>בעת הדלקת הנר המתינו שהשעווה הנמסה תגיע לקצה הזכוכית לפני הכיבוי כדי למנוע מנהור של השעווה, זה עשוי לקחת לפחות 2-4 שעות לפי גודל וסוג הנר.</span>
+                    </li>
+                    <li className="flex items-start gap-3">
+                      <Info className="w-5 h-5 text-gold flex-shrink-0 mt-1" />
+                      <span>אם מתרחשת תופעה של עשן מהנר, בדקו אם יש רוח בסביבת הנר או שהוא מממוקם באזור עם תנועה רבה, העלולים לגרום ללהבה להבהב ולעשן.</span>
+                    </li>
+                    <li className="flex items-start gap-3">
+                      <Info className="w-5 h-5 text-gold flex-shrink-0 mt-1" />
+                      <span>כמו כן, ודאו שהפתילה גזומה לאורך המצוין בתווית התחתית של הנר. אם היא ארוכה יותר, כבו, גזמו את הפתילה והדליקו אותה שוב.</span>
+                    </li>
+                    <li className="flex items-start gap-3">
+                      <Info className="w-5 h-5 text-gold flex-shrink-0 mt-1" />
+                      <span>למדו את כל בני המשפחה את כללי השימוש הבטוח בנרות.</span>
+                    </li>
+                  </ul>
+                </div>
+
+                <div className="bg-gold/10 rounded-lg p-6 border-r-4 border-gold mt-8">
+                  <p className="text-base md:text-lg">
+                    כדי להבטיח שתפיקו את ההנאה המרבית מהנרות שלכם, חשוב לפעול לפי הנחיות הבטיחות והטיפול הסטנדרטיות בנרות. חברת וויטסנט אינה אחראית לשימוש בנרות בצורה שאינה נכונה.
+                  </p>
+                  <p className="text-base md:text-lg mt-4">
+                    כל נר כולל הוראות בטיחות בתווית התחתונה עם ציורים נוספים להמחשה.
+                  </p>
+                </div>
+
+                <div className="space-y-4 mt-8">
+                  <h3 className="text-xl font-bold text-gold mb-4" style={{ fontFamily: 'serif' }}>
+                    הוראות אחסון נרות:
+                  </h3>
+                  
+                  <div className="space-y-3 text-base md:text-lg">
+                    <p>
+                      שעוות הנרות שאנו משתמשים בהם בנרות שלנו רגישים הן לטמפרטורה והן לאור, לכן אנא היזהרו בעת אחסון נרות למשך זמן ממושך. אם אתם מאחסנים את הנר שלכם, ודאו שהוא נמצא במקום קריר ויבש הרחק מאור שמש ישיר או אור חזק. שמירה במקום חשוך כמו ארון או קופסה תגן עליו מפני דהייה ושינוי צבע.
+                    </p>
+                    <p>
+                      מכיוון שהנרות שלנו יכולים להיות רגישים לקור וחום קיצוניים, עדיף לאחסן אותם בין 10 ל-27 מעלות צלזיוס. הקפידו לא להשאיר את הנרות שלנו במכונית למשך זמן ממושך (במיוחד בימים חמים) מכיוון שהם עלולים להימס או לדהות את צבעם. קור קיצוני עלול לגרום לסדקים והפרדה. לאחר חשיפה ממושכת לטמפרטורות קרות, יש לאפשר לנר לחזור לטמפרטורת החדר למשך שעתיים לפחות לפני פתיחת האריזה או שריפתו.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="text-center mt-10 pt-8 border-t border-gold/30">
+                  <p className="text-xl font-bold text-gold" style={{ fontFamily: 'serif' }}>
+                    תודה רבה על הקריאה עכשיו הזמן להנות מהנרות שלנו.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </motion.div>
+        </div>
+      )}
+      
+      <Footer onSafetyClick={() => setSafetyModalOpen(true)} />
       <AccessibilityWidget />
       </div>
       

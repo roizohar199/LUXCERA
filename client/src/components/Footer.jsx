@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { Phone, Mail, Instagram, Facebook } from 'lucide-react';
+import { Phone, Mail, Instagram, Facebook, AlertTriangle } from 'lucide-react';
 
 function Section({ id, className = '', children }) {
   return (
@@ -8,7 +8,7 @@ function Section({ id, className = '', children }) {
   );
 }
 
-function Footer() {
+function Footer({ onSafetyClick }) {
   return (
     <footer className="bg-gradient-to-b from-black via-black-lux to-black text-white py-12 relative overflow-hidden">
       {/* גרדיאנט זהב עדין */}
@@ -46,9 +46,21 @@ function Footer() {
 
         <div className="border-t border-gold/30 pt-8 text-center text-sm text-white/60 relative z-10">
           <p className="mb-2">© 2025 LUXCERA, Powered by Roi Zohar. All rights reserved.</p>
-          <p className="flex justify-center gap-4 flex-wrap">
+          <p className="flex justify-center gap-4 flex-wrap items-center">
             <Link to="/terms-of-service" className="hover:text-white transition underline">תנאי שימוש</Link>
             <span className="text-white/40">|</span>
+            {onSafetyClick && (
+              <>
+                <button 
+                  onClick={onSafetyClick}
+                  className="hover:text-white transition underline flex items-center gap-1"
+                >
+                  <AlertTriangle className="w-4 h-4" />
+                  הוראות שימוש ואזהרה לנרות
+                </button>
+                <span className="text-white/40">|</span>
+              </>
+            )}
             <Link to="/cancellation-policy" className="hover:text-white transition underline">ביטול עסקה</Link>
             <span className="text-white/40">|</span>
             <Link to="/shipping-and-returns" className="hover:text-white transition underline">משלוחים והחזרות</Link>

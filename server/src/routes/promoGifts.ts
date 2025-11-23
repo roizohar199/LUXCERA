@@ -67,8 +67,8 @@ router.post(
 
     try {
       const [result] = await pool.query(
-        `INSERT INTO promo_gifts (token, amount, currency, expires_at, created_by, max_uses)
-         VALUES (?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO promo_gifts (token, amount, currency, expires_at, created_by, max_uses, status)
+         VALUES (?, ?, ?, ?, ?, ?, 'active')`,
         [
           token,
           amount,
@@ -101,12 +101,21 @@ router.get('/:token', async (req, res) => {
   const { token } = req.params;
 
   try {
+    // בדיקה אם זה Gift Card במקום Promo Gift
+    if (token.startsWith('GC-')) {
+      return res.status(400).json({ 
+        ok: false, 
+        error: 'זהו קוד Gift Card, לא Promo Gift. Promo Gifts מתחילים ב-PG-' 
+      });
+    }
+
     const [rows] = await pool.query(
       'SELECT * FROM promo_gifts WHERE token = ?',
       [token]
     ) as [any[], any];
 
     if (!rows.length) {
+      console.log(`[promo-gifts] Token not found: ${token}`);
       return res.status(404).json({ ok: false, error: 'not found' });
     }
 
@@ -154,6 +163,14 @@ router.post(
     const { token } = req.params;
     const { orderTotal } = req.body;
 
+    // בדיקה אם זה Gift Card במקום Promo Gift
+    if (token.startsWith('GC-')) {
+      return res.status(400).json({ 
+        ok: false, 
+        error: 'זהו קוד Gift Card, לא Promo Gift. Promo Gifts מתחילים ב-PG-' 
+      });
+    }
+
     const conn = await pool.getConnection();
     try {
       await conn.beginTransaction();
@@ -166,6 +183,7 @@ router.post(
 
       if (!rows.length) {
         await conn.rollback();
+        console.log(`[promo-gifts] Redeem: Token not found: ${token}`);
         return res.status(404).json({ ok: false, error: 'not found' });
       }
 

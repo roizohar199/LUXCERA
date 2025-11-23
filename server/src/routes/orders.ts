@@ -44,8 +44,9 @@ const orderSchema = z.object({
     fullName: z.string().min(1, 'שם מלא נדרש'),
     email: z.string().email('אימייל לא תקין'),
     phone: z.string().min(1, 'טלפון נדרש'),
-    address: z.string().min(1, 'כתובת נדרשת'),
-    city: z.string().min(1, 'עיר נדרשת'),
+    // address ו-city אופציונליים עבור Gift Cards (לא צריך משלוח פיזי)
+    address: z.union([z.string().min(1), z.null()]).optional(),
+    city: z.union([z.string().min(1), z.null()]).optional(),
     postalCode: z.string().optional(),
     notes: z.string().optional(),
   }),
@@ -63,8 +64,11 @@ const orderSchema = z.object({
     name: z.string(),
     price: z.number(),
     quantity: z.number(),
-    imageUrl: z.string().optional(),
-    category: z.string().optional(),
+    imageUrl: z.union([z.string(), z.null()]).optional(),
+    category: z.union([z.string(), z.null()]).optional(),
+    isGiftCard: z.boolean().optional(),
+    giftCardEmail: z.union([z.string(), z.null()]).optional(),
+    giftCardAmount: z.union([z.number(), z.null()]).optional(),
   })),
 });
 
@@ -242,9 +246,11 @@ router.post(
   asyncHandler(async (req: Request, res: Response) => {
     const validationResult = orderSchema.safeParse(req.body);
     if (!validationResult.success) {
+      console.error('[Order] Validation error:', validationResult.error.errors);
       return res.status(400).json({
         ok: false,
         error: validationResult.error.errors[0]?.message || 'Validation error',
+        details: validationResult.error.errors, // הוספת פרטים נוספים לדיבוג
       });
     }
 
@@ -274,7 +280,12 @@ router.post(
     try {
       // Calculate totals
       const cartTotal = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
-      const shippingFee = cartTotal >= 300 ? 0 : 30;
+      
+      // בדיקה אם כל הפריטים בעגלה הם Gift Cards - אם כן, אין עלות משלוח
+      const isOnlyGiftCardsOrder = cart.length > 0 && cart.every(item => item.isGiftCard === true);
+      
+      // אם כל הפריטים הם Gift Cards, אין עלות משלוח. אחרת, חישוב רגיל
+      const shippingFee = isOnlyGiftCardsOrder ? 0 : (cartTotal >= 300 ? 0 : 30);
       let giftCardAmount = 0;
       let promoGiftAmount = 0;
 
@@ -364,23 +375,80 @@ router.post(
       // Apply promo gift if provided
       let promoGiftInfo = null;
       if (finalPromoGiftToken) {
-        const [promoGifts] = await conn.query(
-          'SELECT * FROM promo_gifts WHERE token = ? AND status = "active" AND expires_at > NOW() AND times_used < max_uses',
+        // קודם נבדוק אם ה-promo gift קיים בכלל
+        const [allPromoGifts] = await conn.query(
+          'SELECT * FROM promo_gifts WHERE token = ?',
           [finalPromoGiftToken]
         ) as [any[], any];
 
-        if (promoGifts.length > 0) {
-          const promoGift = promoGifts[0];
-          promoGiftAmount = Number(promoGift.amount);
-          // שמירת מידע על Promo Gift לפני העדכון (לצורך מייל)
-          promoGiftInfo = {
-            token: finalPromoGiftToken,
-            amount: promoGiftAmount,
-            timesUsedBefore: Number(promoGift.times_used),
-            maxUses: Number(promoGift.max_uses),
-            timesUsedAfter: Number(promoGift.times_used) + 1,
-            remainingUses: Number(promoGift.max_uses) - Number(promoGift.times_used) - 1,
-          };
+        if (allPromoGifts.length === 0) {
+          // אם ה-promo gift לא נמצא, נתעלם ממנו (אולי הוא כבר נמחק או לא קיים)
+          console.log(`[Order] Promo Gift token not found, ignoring: ${finalPromoGiftToken}`);
+          // לא נחזיר שגיאה, פשוט נתעלם מה-promo gift
+        } else {
+          const promoGift = allPromoGifts[0];
+          const now = new Date();
+          const expiresAt = new Date(promoGift.expires_at);
+          const timesUsed = Number(promoGift.times_used);
+          const maxUses = Number(promoGift.max_uses);
+
+          // אם ה-promo gift כבר שומש עד תומו או disabled, נשמור את הפרטים להצגה במייל
+          // אבל לא נשתמש בו שוב בחישוב הסופי (כי הוא כבר נוצל)
+          if (promoGift.status === 'disabled' && timesUsed >= maxUses) {
+            console.log(`[Order] Promo Gift already used and disabled, but keeping info for email: ${finalPromoGiftToken}`);
+            // נשמור את פרטי ה-promo gift להצגה במייל
+            // נגדיר את promoGiftAmount רק להצגה במייל (לא נעדכן את times_used שוב ולא נשתמש בו בחישוב)
+            const promoAmount = Number(promoGift.amount);
+            promoGiftInfo = {
+              token: finalPromoGiftToken,
+              amount: promoAmount,
+              timesUsedBefore: timesUsed,
+              maxUses: maxUses,
+              timesUsedAfter: timesUsed,
+              remainingUses: 0,
+              alreadyUsed: true, // סימן שה-promo gift כבר שומש
+            };
+            // נגדיר את promoGiftAmount כדי להציג אותו נכון במייל וב-totalDiscounts
+            // אבל לא נעדכן את times_used שוב (כי הוא כבר שומש)
+            promoGiftAmount = promoAmount;
+            console.log(`[Order] Promo Gift already used, amount for display: ${promoAmount}, will show in email but not update usage`);
+          } else if (promoGift.status !== 'active') {
+            await conn.rollback();
+            return res.status(400).json({
+              ok: false,
+              error: `Promo Gift לא פעיל (סטטוס: ${promoGift.status})`,
+            });
+          } else if (expiresAt < now) {
+            await conn.rollback();
+            return res.status(400).json({
+              ok: false,
+              error: 'Promo Gift פג תוקף',
+            });
+          } else if (timesUsed >= maxUses) {
+            await conn.rollback();
+            return res.status(400).json({
+              ok: false,
+              error: 'Promo Gift הגיע למקסימום שימושים',
+            });
+          } else {
+            // אם הכל תקין, נשתמש ב-promo gift
+            promoGiftAmount = Number(promoGift.amount);
+            promoGiftInfo = {
+              token: finalPromoGiftToken,
+              amount: promoGiftAmount,
+              timesUsedBefore: timesUsed,
+              maxUses: maxUses,
+              timesUsedAfter: timesUsed + 1,
+              remainingUses: maxUses - timesUsed - 1,
+            };
+
+            console.log(`[Order] Promo Gift applied:`, {
+              token: finalPromoGiftToken,
+              amount: promoGiftAmount,
+              timesUsed: promoGiftInfo.timesUsedBefore,
+              maxUses: promoGiftInfo.maxUses,
+            });
+          }
         }
       }
 
@@ -390,6 +458,11 @@ router.post(
       const finalTotal = Math.max(0, cartTotal + shippingFee - giftCardAmount - promoGiftAmount - loyaltyPointsAmount);
 
       // Create order
+      // עבור Gift Cards בלבד, נשתמש בערכי ברירת מחדל עבור address ו-city (כי הטבלה דורשת NOT NULL)
+      // עבור Gift Cards, נשתמש בערכי ברירת מחדל
+      const orderAddress = isOnlyGiftCardsOrder ? 'Gift Card - No Shipping Required' : (shippingData.address || '');
+      const orderCity = isOnlyGiftCardsOrder ? 'Gift Card' : (shippingData.city || '');
+      
       const [orderResult] = await conn.query(
         `INSERT INTO orders (
           full_name, email, phone, address, city, postal_code, notes,
@@ -399,8 +472,8 @@ router.post(
           shippingData.fullName,
           shippingData.email,
           shippingData.phone,
-          shippingData.address,
-          shippingData.city,
+          orderAddress,
+          orderCity,
           shippingData.postalCode || null,
           shippingData.notes || null,
           finalTotal,
@@ -414,16 +487,30 @@ router.post(
 
       // Create order items
       for (const item of cart) {
+        // עבור Gift Cards, product_id יהיה null (כי זה לא מוצר אמיתי במסד הנתונים)
+        // עבור מוצרים רגילים, product_id הוא מספר
+        let productId: number | null = null;
+        if (!item.isGiftCard) {
+          // עבור מוצרים רגילים, ממירים את ה-ID למספר
+          if (typeof item.id === 'string') {
+            const parsedId = parseInt(item.id);
+            productId = isNaN(parsedId) ? null : parsedId;
+          } else {
+            productId = Number(item.id) || null;
+          }
+        }
+        // עבור Gift Cards, productId נשאר null
+        
         await conn.query(
           `INSERT INTO order_items (
             order_id, product_id, product_name, price, quantity, image_url, category
           ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
           [
             orderId,
-            item.id,
-            item.name,
-            item.price,
-            item.quantity,
+            productId,
+            String(item.name || ''),
+            Number(item.price || 0),
+            Number(item.quantity || 1),
             item.imageUrl || null,
             item.category || null,
           ]
@@ -660,8 +747,8 @@ router.post(
         });
       }
 
-      // Update promo gift usage if used
-      if (finalPromoGiftToken && promoGiftAmount > 0) {
+      // Update promo gift usage if used (רק אם הוא לא שומש כבר)
+      if (finalPromoGiftToken && promoGiftAmount > 0 && !promoGiftInfo?.alreadyUsed) {
         // עדכון ה-times_used ובדיקה אם הגענו למקסימום שימושים
         await conn.query(
           `UPDATE promo_gifts 
@@ -722,7 +809,7 @@ router.post(
           discountsHtml.push(`
             <tr>
               <td style="padding: 10px; border-bottom: 1px solid #ddd; color: #333;">
-                <strong style="color: #10b981;">🎁 מימוש Gift Card</strong><br>
+                <strong style="color: #10b981;">🎁 GIFT CARD</strong><br>
                 <span style="font-size: 13px; color: #666;">קוד: <strong>${giftCardInfo.code}</strong></span><br>
                 <span style="font-size: 12px; color: #999; margin-top: 4px; display: block;">
                   יתרה לפני שימוש: ₪${giftCardInfo.balanceBefore.toFixed(2)} | 
@@ -738,7 +825,7 @@ router.post(
           discountsHtml.push(`
             <tr>
               <td style="padding: 10px; border-bottom: 1px solid #ddd; color: #333;">
-                <strong style="color: #10b981;">🎁 מימוש Gift Card</strong>
+                <strong style="color: #10b981;">🎁 GIFT CARD</strong>
                 ${normalizedGiftCardCode ? `<br><span style="font-size: 13px; color: #666;">קוד: <strong>${normalizedGiftCardCode}</strong></span>` : ''}
               </td>
               <td style="padding: 10px; border-bottom: 1px solid #ddd; text-align: left; color: #10b981; font-weight: bold; font-size: 16px;">-₪${giftCardAmount.toFixed(2)}</td>
@@ -748,40 +835,46 @@ router.post(
         totalDiscounts += giftCardAmount;
       }
       
-      if (promoGiftAmount > 0) {
+      // הצגת PROMO GIFTS במייל - תמיד כשיש token תקין או info
+      if (finalPromoGiftToken && (promoGiftAmount > 0 || promoGiftInfo)) {
+        const displayAmount = promoGiftAmount > 0 ? promoGiftAmount : (promoGiftInfo?.amount || 0);
         if (promoGiftInfo) {
+          const isAlreadyUsed = promoGiftInfo.alreadyUsed || false;
           discountsHtml.push(`
             <tr>
               <td style="padding: 10px; border-bottom: 1px solid #ddd; color: #333;">
-                <strong style="color: #10b981;">🎟️ מימוש Promo Gift / קוד מבצע</strong><br>
+                <strong style="color: #10b981;">🎁 PROMO GIFTS</strong><br>
                 <span style="font-size: 13px; color: #666;">קוד: <strong>${promoGiftInfo.token}</strong></span><br>
                 <span style="font-size: 12px; color: #999; margin-top: 4px; display: block;">
-                  שימושים: ${promoGiftInfo.timesUsedBefore + 1}/${promoGiftInfo.maxUses} | 
-                  שימושים נשארים: ${Math.max(0, promoGiftInfo.remainingUses)}
+                  ${isAlreadyUsed 
+                    ? `שומש בהזמנה זו: ${promoGiftInfo.timesUsedBefore}/${promoGiftInfo.maxUses} | קוד זה שומש עד תומו`
+                    : `שימושים: ${promoGiftInfo.timesUsedBefore + 1}/${promoGiftInfo.maxUses} | שימושים נשארים: ${Math.max(0, promoGiftInfo.remainingUses)}`
+                  }
                 </span>
               </td>
-              <td style="padding: 10px; border-bottom: 1px solid #ddd; text-align: left; color: #10b981; font-weight: bold; font-size: 16px;">-₪${promoGiftAmount.toFixed(2)}</td>
+              <td style="padding: 10px; border-bottom: 1px solid #ddd; text-align: left; color: #10b981; font-weight: bold; font-size: 16px;">-₪${displayAmount.toFixed(2)}</td>
             </tr>
           `);
         } else {
           discountsHtml.push(`
             <tr>
               <td style="padding: 10px; border-bottom: 1px solid #ddd; color: #333;">
-                <strong style="color: #10b981;">🎟️ מימוש Promo Gift / קוד מבצע</strong>
+                <strong style="color: #10b981;">🎁 PROMO GIFTS</strong>
                 ${finalPromoGiftToken ? `<br><span style="font-size: 13px; color: #666;">קוד: <strong>${finalPromoGiftToken}</strong></span>` : ''}
               </td>
-              <td style="padding: 10px; border-bottom: 1px solid #ddd; text-align: left; color: #10b981; font-weight: bold; font-size: 16px;">-₪${promoGiftAmount.toFixed(2)}</td>
+              <td style="padding: 10px; border-bottom: 1px solid #ddd; text-align: left; color: #10b981; font-weight: bold; font-size: 16px;">-₪${displayAmount.toFixed(2)}</td>
             </tr>
           `);
         }
-        totalDiscounts += promoGiftAmount;
+        // נוסיף ל-totalDiscounts את הסכום (גם אם הוא כבר שומש, צריך להציג אותו במייל)
+        totalDiscounts += displayAmount;
       }
       
       if (loyaltyPointsAmount > 0) {
         discountsHtml.push(`
           <tr>
             <td style="padding: 10px; border-bottom: 1px solid #ddd; color: #333;">
-              <strong style="color: #10b981;">⭐ מימוש נקודות מועדון לקוחות</strong>
+              <strong style="color: #10b981;">⭐ נקודות מועדון</strong>
             </td>
             <td style="padding: 10px; border-bottom: 1px solid #ddd; text-align: left; color: #10b981; font-weight: bold; font-size: 16px;">-₪${loyaltyPointsAmount.toFixed(2)}</td>
           </tr>
@@ -864,9 +957,25 @@ router.post(
               </p>
             </div>
             
+            ${isOnlyGiftCardsOrder ? `
+            <div style="background-color: #dbeafe; border-right: 4px solid #3b82f6; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
+              <h3 style="color: #1e40af; font-size: 18px; margin-bottom: 10px; font-weight: bold;">🎁 קבלת קוד ה-Gift Card:</h3>
+              <p style="color: #1e3a8a; font-size: 16px; line-height: 1.8; margin-bottom: 10px;">
+                קוד ה-Gift Card יישלח אליך במייל לאחר שתעביר את התשלום בביט ותשלח צילום מסך של ההעברה לווטסאפ למספר: <strong style="font-size: 18px;">054-6998603</strong>
+              </p>
+              <p style="color: #1e3a8a; font-size: 14px; line-height: 1.6; margin-top: 10px;">
+                <strong>שלבי התהליך:</strong><br>
+                1. העברת התשלום <strong>₪${finalTotal.toFixed(2)}</strong> לביט למספר 054-6998603<br>
+                2. צילום מסך של ההעברה<br>
+                3. שליחת הצילום לווטסאפ למספר 054-6998603<br>
+                4. קבלת קוד ה-Gift Card במייל
+              </p>
+            </div>
+            ` : `
             <p style="color: #666; font-size: 14px; line-height: 1.6;">
               לאחר קבלת התשלום נחזור אליך בהקדם עם פרטי המשלוח.
             </p>
+            `}
             <p style="color: #666; font-size: 14px; line-height: 1.6; margin-top: 10px;">
               תודה על רכישתך ב-LUXCERA! 🕯️
             </p>
@@ -874,12 +983,110 @@ router.post(
         </div>
       `;
 
-      await transporter.sendMail({
-        from: process.env.EMAIL_FROM,
-        to: shippingData.email,
-        subject: `הזמנה #${orderId} התקבלה - LUXCERA`,
-        html: emailHtml,
-      });
+      const ADMIN_EMAIL = process.env.EMAIL_ADMIN || 'LUXCERA777@GMAIL.COM';
+
+      // בניית מייל למנהל אדמין על הזמנה חדשה
+      const adminOrderHtml = `
+        <div style="font-family: Arial, sans-serif; text-align: right; direction: rtl; padding: 20px; background-color: #f9fafb;">
+          <div style="max-width: 600px; margin: 0 auto; background-color: white; border-radius: 8px; padding: 30px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+            <h2 style="color: #333; font-size: 24px; margin-bottom: 20px;">הזמנה חדשה התקבלה! 🎉</h2>
+            <p style="color: #666; font-size: 16px; line-height: 1.6; margin-bottom: 20px;">
+              מספר הזמנה: <strong>#${orderId}</strong>
+            </p>
+            
+            <div style="background-color: #f9fafb; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
+              <h3 style="color: #333; font-size: 18px; margin-bottom: 15px;">פרטי הלקוח:</h3>
+              <p style="color: #666; font-size: 16px; line-height: 1.8; margin: 5px 0;">
+                <strong>שם מלא:</strong> ${sanitizeForEmail(shippingData.fullName)}<br>
+                <strong>אימייל:</strong> ${sanitizeForEmail(shippingData.email)}<br>
+                <strong>טלפון:</strong> ${sanitizeForEmail(shippingData.phone)}<br>
+                ${!isOnlyGiftCardsOrder ? `
+                <strong>כתובת:</strong> ${sanitizeForEmail(orderAddress)}<br>
+                <strong>עיר:</strong> ${sanitizeForEmail(orderCity)}<br>
+                ` : '<strong>סוג הזמנה:</strong> Gift Card (אין צורך במשלוח פיזי)<br>'}
+                ${shippingData.postalCode ? `<strong>מיקוד:</strong> ${sanitizeForEmail(shippingData.postalCode)}<br>` : ''}
+                ${shippingData.notes ? `<strong>הערות:</strong> ${sanitizeForEmail(shippingData.notes)}<br>` : ''}
+              </p>
+            </div>
+
+            <div style="background-color: #f9fafb; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
+              <h3 style="color: #333; font-size: 18px; margin-bottom: 15px;">פרטי ההזמנה:</h3>
+              <table style="width: 100%; border-collapse: collapse;">
+                ${orderItemsHtml}
+                <tr>
+                  <td style="padding: 10px; border-top: 2px solid #ddd; font-weight: bold; color: #666;">סה"כ מוצרים:</td>
+                  <td style="padding: 10px; border-top: 2px solid #ddd; text-align: left; font-weight: bold;">₪${(cartTotal).toFixed(2)}</td>
+                </tr>
+                ${shippingFee > 0 ? `
+                <tr>
+                  <td style="padding: 8px; color: #666;">דמי משלוח:</td>
+                  <td style="padding: 8px; text-align: left;">₪${shippingFee.toFixed(2)}</td>
+                </tr>
+                ` : `
+                <tr>
+                  <td style="padding: 8px; color: #10b981; font-weight: bold;">דמי משלוח:</td>
+                  <td style="padding: 8px; text-align: left; color: #10b981; font-weight: bold;">חינם</td>
+                </tr>
+                `}
+                ${discountsHtml.length > 0 ? `
+                <tr>
+                  <td colspan="2" style="padding: 15px 0 10px 0; border-top: 2px solid #ddd;">
+                    <h4 style="color: #333; font-size: 16px; font-weight: bold; margin: 0;">💰 הנחות וקיזוזים:</h4>
+                  </td>
+                </tr>
+                ${discountsHtml.join('')}
+                <tr>
+                  <td style="padding: 10px; background-color: #f0fdf4; color: #333; font-weight: bold; font-size: 15px;">סה"כ הנחות וקיזוזים:</td>
+                  <td style="padding: 10px; background-color: #f0fdf4; text-align: left; color: #10b981; font-weight: bold; font-size: 16px;">-₪${totalDiscounts.toFixed(2)}</td>
+                </tr>
+                ` : ''}
+                <tr>
+                  <td colspan="2" style="padding: 5px 0;"></td>
+                </tr>
+                <tr>
+                  <td style="padding: 15px; border-top: 3px solid #333; background-color: #fef3c7; font-weight: bold; font-size: 18px; color: #92400e;">💳 סכום לתשלום:</td>
+                  <td style="padding: 15px; border-top: 3px solid #333; background-color: #fef3c7; text-align: left; font-weight: bold; font-size: 22px; color: #92400e;">₪${finalTotal.toFixed(2)}</td>
+                </tr>
+                <tr>
+                  <td style="padding: 8px; color: #666;">שיטת תשלום:</td>
+                  <td style="padding: 8px; text-align: left; color: #666;">${paymentData.paymentMethod === 'bit' ? 'ביט' : paymentData.paymentMethod}</td>
+                </tr>
+              </table>
+            </div>
+
+            ${isOnlyGiftCardsOrder ? `
+            <div style="background-color: #dbeafe; border-right: 4px solid #3b82f6; padding: 15px; border-radius: 8px; margin-bottom: 20px;">
+              <p style="color: #1e40af; font-size: 14px; line-height: 1.6; margin: 0;">
+                <strong>⚠️ שימו לב:</strong> זו הזמנת Gift Card. הקוד יישלח ללקוח במייל לאחר קבלת התשלום וצילום העברה לווטסאפ.
+              </p>
+            </div>
+            ` : ''}
+
+            <p style="color: #666; font-size: 14px; line-height: 1.6; margin-top: 20px;">
+              תאריך הזמנה: ${new Date().toLocaleString('he-IL')}
+            </p>
+          </div>
+        </div>
+      `;
+
+      // שליחת מיילים ללקוח ולמנהל
+      await Promise.all([
+        transporter.sendMail({
+          from: process.env.EMAIL_FROM,
+          to: shippingData.email,
+          subject: `הזמנה #${orderId} התקבלה - LUXCERA`,
+          html: emailHtml,
+        }),
+        transporter.sendMail({
+          from: process.env.EMAIL_FROM,
+          to: ADMIN_EMAIL,
+          subject: `הזמנה חדשה #${orderId} - LUXCERA`,
+          html: adminOrderHtml,
+        }).catch((adminEmailError) => {
+          console.error('Failed to send admin notification email:', adminEmailError);
+          // Don't fail the order if admin email fails
+        }),
+      ]);
 
       // Send WhatsApp notification if configured
       try {
@@ -895,13 +1102,14 @@ router.post(
       }
 
       // Add loyalty points if user is a club member
+      // חשוב: הנקודות מחושבות רק על סכום המוצרים (cartTotal) לפני משלוח, קופונים ונקודות
       try {
         const user = await users.findByEmail(shippingData.email);
         if (user) {
           await addPurchasePoints({
             userId: user.id,
             orderId,
-            amount: finalTotal,
+            amount: cartTotal, // רק סכום המוצרים, ללא משלוח והנחות
           });
         }
       } catch (loyaltyError) {

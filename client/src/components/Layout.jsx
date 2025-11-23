@@ -15,6 +15,20 @@ import BitPaymentButton from './BitPaymentButton';
 import GiftCardApply from './GiftCardApply';
 import PromoGiftApply from './PromoGiftApply';
 
+// Base API URL helper
+const getApiUrl = (path) => {
+  const cleanPath = path.startsWith('/') ? path : `/${path}`;
+  const envUrl = (import.meta?.env?.VITE_API_URL || '').trim();
+  if (!envUrl) {
+    return cleanPath;
+  }
+  let baseUrl = envUrl.replace(/\/+$/, '');
+  if (baseUrl.endsWith('/api')) {
+    baseUrl = baseUrl.slice(0, -4);
+  }
+  return `${baseUrl}${cleanPath}`;
+};
+
 function Nav({ onCartClick, onUserClick, onSearchClick, cartCount, isLoggedIn, userName }) {
   const [mobileMenuOpen, setMobileMenuOpen] = React.useState(false);
   const navigate = useNavigate();
@@ -75,6 +89,140 @@ function Nav({ onCartClick, onUserClick, onSearchClick, cartCount, isLoggedIn, u
   );
 }
 
+function SearchModal({ isOpen, onClose, products, onAddToCart }) {
+  const navigate = useNavigate();
+  const [searchQuery, setSearchQuery] = React.useState('');
+
+  const filteredProducts = React.useMemo(() => {
+    if (!searchQuery.trim()) return products;
+    const query = searchQuery.toLowerCase();
+    return products.filter(product => 
+      product.name.toLowerCase().includes(query) ||
+      (product.description && product.description.toLowerCase().includes(query))
+    );
+  }, [searchQuery, products]);
+
+  React.useEffect(() => {
+    if (isOpen) {
+      const timer = setTimeout(() => {
+        const input = document.querySelector('#search-input-layout');
+        if (input) input.focus();
+      }, 100);
+      return () => clearTimeout(timer);
+    } else {
+      setSearchQuery('');
+    }
+  }, [isOpen]);
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-start justify-center pt-20">
+      <div className="absolute inset-0 bg-black/50" onClick={onClose}></div>
+      <motion.div 
+        initial={{ opacity: 0, y: -20 }} 
+        animate={{ opacity: 1, y: 0 }} 
+        exit={{ opacity: 0, y: -20 }} 
+        className="relative bg-white rounded-lg shadow-2xl w-full max-w-3xl mx-4 max-h-[80vh] flex flex-col"
+      >
+        <div className="flex justify-between items-center p-6 border-b">
+          <h2 className="text-2xl font-bold text-gray-900">חיפוש מוצרים</h2>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-900" aria-label="סגור">
+            <X className="w-6 h-6" />
+          </button>
+        </div>
+
+        <div className="p-6 border-b">
+          <div className="relative">
+            <Search className="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+            <input
+              id="search-input-layout"
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="חפש מוצרים..."
+              className="w-full border border-gray-300 rounded-lg px-12 py-4 text-lg text-gray-900 placeholder-gray-500 focus:outline-none focus:border-gold focus:ring-2 focus:ring-gold/20 transition-colors"
+              dir="rtl"
+              aria-label="חיפוש"
+            />
+          </div>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-6">
+          {filteredProducts.length === 0 ? (
+            <div className="text-center py-12">
+              <p className="text-gray-600 text-lg">
+                {searchQuery.trim() ? 'לא נמצאו מוצרים התואמים לחיפוש' : 'התחל להקליד כדי לחפש מוצרים'}
+              </p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {filteredProducts.map(product => {
+                const hasSalePrice = product.salePrice && product.salePrice > 0;
+                return (
+                  <motion.div
+                    key={product.id}
+                    whileHover={{ y: -4 }}
+                    className="flex items-center gap-4 border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow cursor-pointer group"
+                    onClick={() => {
+                      navigate('/');
+                      onClose();
+                    }}
+                  >
+                    <div className={`w-20 h-20 rounded-lg ${product.color || 'bg-white'} flex items-center justify-center flex-shrink-0 relative overflow-hidden`}>
+                      {product.imageUrl ? (
+                        <img src={product.imageUrl} alt={product.name} className="w-full h-full object-cover" />
+                      ) : (
+                        <div className="text-4xl" aria-hidden="true">{product.image || '🕯️'}</div>
+                      )}
+                      {hasSalePrice && (
+                        <div className="absolute top-0 left-0 bg-red-500 text-white text-xs font-bold px-2 py-1 rounded-br-lg">
+                          מבצע
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="flex-1 min-w-0">
+                      <h3 className="font-semibold text-gray-900 mb-1 text-lg truncate" style={{ fontFamily: 'serif' }}>{product.name}</h3>
+                      {hasSalePrice ? (
+                        <div className="mb-2 flex flex-col gap-1">
+                          <div className="flex items-center gap-2">
+                            <span className="text-gold font-semibold text-sm">מבצע:</span>
+                            <span className="text-gold text-xl font-bold">₪ {Number(product.salePrice).toFixed(2)}</span>
+                          </div>
+                          <span className="text-gray-400 text-sm line-through">₪ {Number(product.originalPrice || product.price).toFixed(2)}</span>
+                        </div>
+                      ) : (
+                        <p className="text-gray-700 text-xl font-semibold mb-2">₪ {Number(product.price).toFixed(2)}</p>
+                      )}
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (product.inStock !== false) {
+                            onAddToCart(product);
+                            onClose();
+                          }
+                        }}
+                        className={`text-sm px-4 py-2 rounded-lg font-semibold transition-colors ${product.inStock !== false ? 'bg-black text-white hover:bg-gray-800' : 'bg-gray-400 text-white cursor-not-allowed'}`}
+                        disabled={product.inStock === false}
+                      >
+                        {product.inStock !== false ? 'הוספה לסל' : 'אזל מהמלאי'}
+                      </button>
+                    </div>
+                  </motion.div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        <div className="p-4 border-t bg-gray-50 text-center text-sm text-gray-600">נמצאו {filteredProducts.length} מוצרים</div>
+      </motion.div>
+    </div>
+  );
+}
+
 function Layout({ children, onCartClick, onUserClick, onSearchClick, cartCount, isLoggedIn, userName }) {
   const { 
     cart, 
@@ -90,10 +238,14 @@ function Layout({ children, onCartClick, onUserClick, onSearchClick, cartCount, 
     closeAccountModal,
     isLoggedIn: contextIsLoggedIn,
     login,
-    logout
+    logout,
+    addToCart
   } = useApp();
   
   const [checkoutOpen, setCheckoutOpen] = React.useState(false);
+  const [searchOpen, setSearchOpen] = React.useState(false);
+  const [allProducts, setAllProducts] = React.useState([]);
+  const [loadingProducts, setLoadingProducts] = React.useState(false);
   
   // אם לא הועבר cartCount, נשתמש ב-getCartCount מ-AppContext
   const displayCartCount = cartCount !== undefined ? cartCount : getCartCount();
@@ -136,6 +288,61 @@ function Layout({ children, onCartClick, onUserClick, onSearchClick, cartCount, 
     }
   };
 
+  // Load products for search
+  React.useEffect(() => {
+    const loadProducts = async () => {
+      try {
+        setLoadingProducts(true);
+        const response = await fetch(getApiUrl('/api/public/products'));
+        if (response.ok) {
+          const data = await response.json();
+          const transformed = (data.products || []).map(product => ({
+            id: product.id,
+            name: product.title,
+            price: product.salePrice || product.price,
+            originalPrice: product.price,
+            salePrice: product.salePrice || null,
+            inStock: product.isActive === 1 || product.isActive === true,
+            color: product.color || 'bg-white',
+            image: product.imageUrl || '🕯️',
+            imageUrl: product.imageUrl,
+            isNew: product.isNew === 1 || product.isNew === true,
+            category: product.category || 'general',
+            description: product.description,
+          }));
+          setAllProducts(transformed);
+        } else {
+          console.error('Failed to load products:', response.status);
+          setAllProducts([]);
+        }
+      } catch (error) {
+        console.error('Error loading products:', error);
+        setAllProducts([]);
+      } finally {
+        setLoadingProducts(false);
+      }
+    };
+    loadProducts();
+  }, []);
+
+  const handleSearchClick = () => {
+    if (onSearchClick) {
+      onSearchClick();
+    } else {
+      setSearchOpen(true);
+    }
+  };
+
+  const handleCloseSearch = () => {
+    setSearchOpen(false);
+  };
+
+  const handleAddToCartFromSearch = (product) => {
+    if (addToCart) {
+      addToCart(product);
+    }
+  };
+
   return (
     <div dir="rtl" className="min-h-screen bg-ivory relative">
       {/* רקע שקוף עם תמונות נרות מפוזרות - עדין מאוד */}
@@ -163,12 +370,18 @@ function Layout({ children, onCartClick, onUserClick, onSearchClick, cartCount, 
         <Nav 
           onCartClick={handleCartClick}
           onUserClick={handleUserClick}
-          onSearchClick={onSearchClick}
+          onSearchClick={handleSearchClick}
           cartCount={displayCartCount}
           isLoggedIn={displayIsLoggedIn}
           userName={userName}
         />
         {children}
+        <SearchModal 
+          isOpen={searchOpen} 
+          onClose={handleCloseSearch} 
+          products={allProducts} 
+          onAddToCart={handleAddToCartFromSearch} 
+        />
       <CartModal 
         isOpen={isCartOpen}
         onClose={closeCart}
@@ -200,20 +413,6 @@ function Layout({ children, onCartClick, onUserClick, onSearchClick, cartCount, 
     </div>
   );
 }
-
-// Base API URL helper
-const getApiUrl = (path) => {
-  const cleanPath = path.startsWith('/') ? path : `/${path}`;
-  const envUrl = (import.meta?.env?.VITE_API_URL || '').trim();
-  if (!envUrl) {
-    return cleanPath;
-  }
-  let baseUrl = envUrl.replace(/\/+$/, '');
-  if (baseUrl.endsWith('/api')) {
-    baseUrl = baseUrl.slice(0, -4);
-  }
-  return `${baseUrl}${cleanPath}`;
-};
 
 // רשימת ערים, מושבים וקיבוצים בישראל - ללא כפילויות
 const ISRAELI_CITIES_RAW = [
@@ -505,9 +704,17 @@ function CheckoutModal({ isOpen, onClose, cart, onOrderComplete }) {
   }, [cartToUse]);
 
   const shippingFee = React.useMemo(() => {
+    // בדיקה אם כל הפריטים בעגלה הם Gift Cards - אם כן, אין עלות משלוח
+    const isOnlyGiftCards = cartToUse.length > 0 && cartToUse.every(item => item.isGiftCard === true);
+    
+    // אם כל הפריטים הם Gift Cards, אין עלות משלוח. אחרת, חישוב רגיל
+    if (isOnlyGiftCards) {
+      return 0;
+    }
+    
     const fee = cartTotal >= 300 ? 0 : 30;
     return fee;
-  }, [cartTotal]);
+  }, [cartTotal, cartToUse]);
 
   // שימוש ב-getFinalTotal מה-AppContext לחישוב הסכום הסופי, עם נקודות מועדון
   const finalTotal = React.useMemo(() => {
@@ -715,12 +922,18 @@ function CheckoutModal({ isOpen, onClose, cart, onOrderComplete }) {
       errors.phone = 'מספר טלפון לא תקין';
     }
     
-    if (!shippingData.address || shippingData.address.trim() === '') {
-      errors.address = 'כתובת משלוח נדרשת';
-    }
+    // בדיקה אם כל הפריטים בעגלה הם Gift Cards - אם כן, לא צריך address ו-city
+    const isOnlyGiftCards = cartToUse.length > 0 && cartToUse.every(item => item.isGiftCard === true);
     
-    if (!shippingData.city || shippingData.city.trim() === '') {
-      errors.city = 'עיר נדרשת';
+    // address ו-city נדרשים רק אם יש מוצרים רגילים (לא Gift Cards בלבד)
+    if (!isOnlyGiftCards) {
+      if (!shippingData.address || shippingData.address.trim() === '') {
+        errors.address = 'כתובת משלוח נדרשת';
+      }
+      
+      if (!shippingData.city || shippingData.city.trim() === '') {
+        errors.city = 'עיר נדרשת';
+      }
     }
     
     // מיקוד לא חובה - לא בודקים אותו
@@ -781,8 +994,18 @@ function CheckoutModal({ isOpen, onClose, cart, onOrderComplete }) {
     try {
       // שליחת ההזמנה לשרת
       // מוודאים שכל הנתונים עם הטיפוסים הנכונים
+      // בדיקה אם כל הפריטים בעגלה הם Gift Cards - אם כן, לא צריך address ו-city
+      const isOnlyGiftCards = cartToUse.length > 0 && cartToUse.every(item => item.isGiftCard === true);
+      
+      // הכנת shippingData - עבור Gift Cards בלבד, address ו-city יכולים להיות null
+      const shippingDataForOrder = {
+        ...shippingData,
+        address: isOnlyGiftCards ? null : (shippingData.address || null),
+        city: isOnlyGiftCards ? null : (shippingData.city || null),
+      };
+      
       const orderData = {
-        shippingData,
+        shippingData: shippingDataForOrder,
         paymentData: {
           paymentMethod: 'bit',
         },
@@ -894,14 +1117,20 @@ function CheckoutModal({ isOpen, onClose, cart, onOrderComplete }) {
         <div className="sticky top-0 bg-white border-b p-6 rounded-t-lg z-10">
           <div className="flex justify-between items-center mb-4">
             <h2 className="text-2xl font-bold text-gray-900">תשלום מאובטח</h2>
-            {step > 1 && (
-              <button type="button" onClick={() => setStep(step - 1)} className="text-[#40E0D0] hover:text-[#30D5C8] flex items-center gap-2">
-                <ChevronRight className="w-5 h-5" /> חזרה
+            <div className="flex items-center gap-4">
+              {step > 1 ? (
+                <button type="button" onClick={() => setStep(step - 1)} className="text-[#40E0D0] hover:text-[#30D5C8] flex items-center gap-2">
+                  <ChevronRight className="w-5 h-5" /> חזרה
+                </button>
+              ) : (
+                <button type="button" onClick={onClose} className="text-gray-600 hover:text-gray-900 flex items-center gap-2">
+                  <ChevronRight className="w-5 h-5" /> חזרה
+                </button>
+              )}
+              <button onClick={onClose} className="text-gray-400 hover:text-gray-900" aria-label="סגור">
+                <X className="w-6 h-6" />
               </button>
-            )}
-            <button onClick={onClose} className="text-gray-400 hover:text-gray-900" aria-label="סגור">
-              <X className="w-6 h-6" />
-            </button>
+            </div>
           </div>
 
           <div className="flex items-center justify-center gap-4">
@@ -1172,8 +1401,8 @@ function CheckoutModal({ isOpen, onClose, cart, onOrderComplete }) {
                         </label>
                         {loyaltyMember.tier && (() => {
                           const tierInfo = TIER_INFO[loyaltyMember.tier];
-                          const orderTotalWithoutPoints = cartTotal + shippingFee - giftCardAmount - promoAmount;
-                          const pointsToEarn = Math.floor(orderTotalWithoutPoints * tierInfo.earnRate);
+                          // נקודות מחושבות רק על סכום המוצרים (cartTotal) ללא משלוח והנחות
+                          const pointsToEarn = Math.floor(cartTotal * tierInfo.earnRate);
                           return (
                             <div className="text-right text-sm">
                               <span className="font-semibold" style={{ color: tierInfo.color }}>

@@ -154,8 +154,8 @@ export async function createMember(params: {
 
   const result = await execute(
     `INSERT INTO loyalty_members
-      (user_id, status, total_points, used_points, total_spent, join_date, birthday, phone, marketing_opt_in)
-     VALUES (?, 'ACTIVE', 0, 0, 0, NOW(), ?, ?, ?)`,
+      (user_id, status, total_points, used_points, total_spent, join_date, birthday, phone, marketing_opt_in, signup_bonus_given)
+     VALUES (?, 'ACTIVE', 0, 0, 0, NOW(), ?, ?, ?, 1)`,
     [userId, birthdayValue, phoneValue, marketingValue]
   );
 
@@ -267,19 +267,18 @@ export async function addPurchasePoints(params: {
     );
   }
 
-  // בדוק אם הלקוח עלה מדרגה
-  const oldTier = calculateLoyaltyTier(newTotalSpent - amount);
-  let tierUpBonus = 0;
-  if (oldTier !== tier) {
-    // קפיצת מדרגה - בונוס חד-פעמי של 100 נקודות
-    tierUpBonus = 100;
-    await addTransaction({
-      memberId: updatedMember.id,
-      type: 'EARN',
-      points: tierUpBonus,
-      description: `קפיצת מדרגה: ${tierInfo.labelHe} - בונוס 100 נקודות`,
-    });
-  }
+  // בדוק אם הלקוח עלה מדרגה (בונוס קפיצת מדרגה בוטל)
+  // const oldTier = calculateLoyaltyTier(newTotalSpent - amount);
+  // if (oldTier !== tier) {
+  //   // קפיצת מדרגה - בונוס חד-פעמי של 100 נקודות (בוטל)
+  //   // tierUpBonus = 100;
+  //   // await addTransaction({
+  //   //   memberId: updatedMember.id,
+  //   //   type: 'EARN',
+  //   //   points: tierUpBonus,
+  //   //   description: `קפיצת מדרגה: ${tierInfo.labelHe} - בונוס 100 נקודות`,
+  //   // });
+  // }
 
   // הוסף נקודות מהרכישה לפי המדרגה
   await addTransaction({

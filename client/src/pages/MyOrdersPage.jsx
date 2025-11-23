@@ -87,15 +87,20 @@ function MyOrdersPage() {
         isLoggedIn={false}
         userName=""
       >
-        <div className="min-h-screen bg-ivory flex items-center justify-center">
+        <div className="min-h-screen bg-black flex items-center justify-center">
           <div className="text-center">
-            <h1 className="text-4xl font-bold text-gray-900 mb-4">נדרשת התחברות</h1>
-            <p className="text-gray-600 mb-6">עליך להתחבר כדי לצפות בהזמנות שלך</p>
+            <h1 className="text-4xl font-bold text-gold mb-4" style={{ fontFamily: 'serif' }}>נדרשת התחברות</h1>
+            <p className="text-gold/80 mb-6">עליך להתחבר כדי לצפות בהזמנות שלך</p>
             <button
               onClick={() => navigate('/')}
-              className="bg-gold text-black-lux px-6 py-3 rounded-lg font-semibold hover:bg-gold/90 transition-colors"
+              className="group relative inline-flex items-center gap-3 px-6 py-3 bg-gradient-to-r from-gold/20 via-gold/30 to-gold/20 border-2 border-gold/50 rounded-lg shadow-lg hover:shadow-gold transition-all duration-300 hover:scale-105"
             >
-              חזרה לדף הבית
+              <div className="absolute inset-0 bg-gradient-to-r from-gold/10 via-transparent to-gold/10 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+              <ArrowRight className="w-5 h-5 text-gold group-hover:translate-x-1 transition-transform duration-300 relative z-10" />
+              <span className="text-gold font-semibold text-lg relative z-10 group-hover:text-gold/90 transition-colors duration-300" style={{ fontFamily: 'serif' }}>
+                חזרה לדף הבית
+              </span>
+              <div className="absolute -inset-1 bg-gold/20 rounded-lg blur opacity-0 group-hover:opacity-100 transition-opacity duration-300 -z-10"></div>
             </button>
           </div>
         </div>
@@ -132,21 +137,25 @@ function MyOrdersPage() {
       isLoggedIn={effectiveIsLoggedIn}
       userName={userName}
     >
-      <div className="min-h-screen bg-ivory pt-20 pb-16">
+      <div className="min-h-screen bg-black pt-20 pb-16">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           {/* Header */}
           <div className="mb-8">
             <button
               onClick={() => navigate('/')}
-              className="flex items-center gap-2 text-gray-600 hover:text-gray-900 mb-4 transition-colors"
+              className="group relative inline-flex items-center gap-3 px-6 py-3 bg-gradient-to-r from-gold/20 via-gold/30 to-gold/20 border-2 border-gold/50 rounded-lg shadow-lg hover:shadow-gold transition-all duration-300 hover:scale-105 mb-4"
             >
-              <ArrowRight className="w-5 h-5" />
-              <span>חזרה לדף הבית</span>
+              <div className="absolute inset-0 bg-gradient-to-r from-gold/10 via-transparent to-gold/10 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+              <ArrowRight className="w-5 h-5 text-gold group-hover:translate-x-1 transition-transform duration-300 relative z-10" />
+              <span className="text-gold font-semibold text-lg relative z-10 group-hover:text-gold/90 transition-colors duration-300" style={{ fontFamily: 'serif' }}>
+                חזרה לדף הבית
+              </span>
+              <div className="absolute -inset-1 bg-gold/20 rounded-lg blur opacity-0 group-hover:opacity-100 transition-opacity duration-300 -z-10"></div>
             </button>
-            <h1 className="text-4xl font-bold text-gray-900 mb-2" style={{ fontFamily: 'serif' }}>
+            <h1 className="text-4xl font-bold text-gold mb-2" style={{ fontFamily: 'serif' }}>
               הזמנות שלי
             </h1>
-            <p className="text-gray-600">כל ההזמנות שביצעת באתר</p>
+            <p className="text-gold/80">כל ההזמנות שביצעת באתר</p>
           </div>
 
           {/* Loading State */}
@@ -154,24 +163,24 @@ function MyOrdersPage() {
             <div className="flex items-center justify-center min-h-[400px]">
               <div className="text-center">
                 <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gold mx-auto mb-4"></div>
-                <p className="text-gray-600">טוען הזמנות...</p>
+                <p className="text-gold/80">טוען הזמנות...</p>
               </div>
             </div>
           )}
 
           {/* Error State */}
           {error && !loading && (
-            <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6">
-              <p className="text-red-800">{error}</p>
+            <div className="bg-red-900/30 border border-red-500/50 rounded-lg p-4 mb-6">
+              <p className="text-red-300">{error}</p>
             </div>
           )}
 
           {/* Empty State */}
           {!loading && !error && orders.length === 0 && (
-            <div className="bg-white rounded-lg shadow-luxury p-12 text-center">
-              <Package className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-              <h2 className="text-2xl font-bold text-gray-900 mb-2">אין הזמנות עדיין</h2>
-              <p className="text-gray-600 mb-6">עדיין לא ביצעת הזמנות באתר</p>
+            <div className="bg-black/90 rounded-lg shadow-luxury border-2 border-gold/30 p-12 text-center">
+              <Package className="w-16 h-16 text-gold/60 mx-auto mb-4" />
+              <h2 className="text-2xl font-bold text-gold mb-2" style={{ fontFamily: 'serif' }}>אין הזמנות עדיין</h2>
+              <p className="text-gold/80 mb-6">עדיין לא ביצעת הזמנות באתר</p>
               <button
                 onClick={() => navigate('/')}
                 className="bg-gold text-black-lux px-6 py-3 rounded-lg font-semibold hover:bg-gold/90 transition-colors"
@@ -187,19 +196,19 @@ function MyOrdersPage() {
               {orders.map((order) => (
                 <div
                   key={order.id}
-                  className="bg-white rounded-lg shadow-luxury border-2 border-gold/20 overflow-hidden"
+                  className="bg-black/90 rounded-lg shadow-luxury border-2 border-gold/30 overflow-hidden"
                 >
                   {/* Order Header */}
-                  <div className="bg-gradient-to-r from-gold/10 to-transparent p-6 border-b border-gold/20">
+                  <div className="bg-gradient-to-r from-gold/20 to-transparent p-6 border-b border-gold/30">
                     <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
                       <div>
                         <div className="flex items-center gap-3 mb-2">
                           <Package className="w-6 h-6 text-gold" />
-                          <h2 className="text-2xl font-bold text-gray-900">
+                          <h2 className="text-2xl font-bold text-gold" style={{ fontFamily: 'serif' }}>
                             הזמנה #{order.id}
                           </h2>
                         </div>
-                        <div className="flex items-center gap-2 text-gray-600">
+                        <div className="flex items-center gap-2 text-gold/80">
                           <Calendar className="w-4 h-4" />
                           <span className="text-sm">{formatDate(order.createdAt)}</span>
                         </div>
@@ -208,7 +217,7 @@ function MyOrdersPage() {
                         <p className="text-3xl font-bold text-gold mb-1">
                           ₪{order.totalAmount.toFixed(2)}
                         </p>
-                        <p className="text-sm text-gray-600">
+                        <p className="text-sm text-gold/80">
                           {order.itemCount} {order.itemCount === 1 ? 'פריט' : 'פריטים'}
                         </p>
                       </div>
@@ -220,11 +229,11 @@ function MyOrdersPage() {
                     {/* Shipping Information */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
                       <div>
-                        <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                        <h3 className="text-lg font-semibold text-gold mb-4 flex items-center gap-2" style={{ fontFamily: 'serif' }}>
                           <MapPin className="w-5 h-5 text-gold" />
                           פרטי משלוח
                         </h3>
-                        <div className="space-y-2 text-gray-700">
+                        <div className="space-y-2 text-gold/90">
                           <p><strong>שם:</strong> {order.fullName}</p>
                           <p><strong>כתובת:</strong> {order.address}</p>
                           <p><strong>עיר:</strong> {order.city}</p>
@@ -235,23 +244,23 @@ function MyOrdersPage() {
                       </div>
 
                       <div>
-                        <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                        <h3 className="text-lg font-semibold text-gold mb-4 flex items-center gap-2" style={{ fontFamily: 'serif' }}>
                           <CreditCard className="w-5 h-5 text-gold" />
                           פרטי תשלום
                         </h3>
-                        <div className="space-y-2 text-gray-700">
+                        <div className="space-y-2 text-gold/90">
                           <p><strong>שיטת תשלום:</strong> {formatPaymentMethod(order.paymentMethod)}</p>
                           {order.giftCardAmount > 0 && (
                             <>
                               <p><strong>שימוש בגיפט קארד:</strong> ₪{order.giftCardAmount.toFixed(2)}</p>
                               {order.giftCardCode && (
-                                <p className="text-sm text-gray-600">
+                                <p className="text-sm text-gold/70">
                                   <strong>קוד:</strong> {order.giftCardCode}
                                 </p>
                               )}
                             </>
                           )}
-                          <p className="pt-2 border-t border-gray-200">
+                          <p className="pt-2 border-t border-gold/30">
                             <strong>סה"כ:</strong> ₪{order.totalAmount.toFixed(2)}
                           </p>
                         </div>
@@ -259,12 +268,12 @@ function MyOrdersPage() {
                     </div>
 
                     {/* Contact Information */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6 pb-6 border-b border-gray-200">
-                      <div className="flex items-center gap-2 text-gray-700">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6 pb-6 border-b border-gold/30">
+                      <div className="flex items-center gap-2 text-gold/90">
                         <Mail className="w-4 h-4 text-gold" />
                         <span>{order.email}</span>
                       </div>
-                      <div className="flex items-center gap-2 text-gray-700">
+                      <div className="flex items-center gap-2 text-gold/90">
                         <Phone className="w-4 h-4 text-gold" />
                         <span>{order.phone}</span>
                       </div>
@@ -272,31 +281,31 @@ function MyOrdersPage() {
 
                     {/* Order Items */}
                     <div>
-                      <h3 className="text-lg font-semibold text-gray-900 mb-4">פריטים בהזמנה</h3>
+                      <h3 className="text-lg font-semibold text-gold mb-4" style={{ fontFamily: 'serif' }}>פריטים בהזמנה</h3>
                       <div className="space-y-4">
                         {order.items.map((item) => (
                           <div
                             key={item.id}
-                            className="flex items-center gap-4 p-4 bg-gray-50 rounded-lg"
+                            className="flex items-center gap-4 p-4 bg-black/50 rounded-lg border border-gold/20"
                           >
                             {item.imageUrl && (
                               <img
                                 src={item.imageUrl}
                                 alt={item.name}
-                                className="w-20 h-20 object-cover rounded-lg"
+                                className="w-20 h-20 object-cover rounded-lg border border-gold/30"
                                 onError={(e) => {
                                   e.target.style.display = 'none';
                                 }}
                               />
                             )}
                             <div className="flex-1">
-                              <h4 className="font-semibold text-gray-900 mb-1">{item.name}</h4>
-                              <p className="text-sm text-gray-600">
+                              <h4 className="font-semibold text-gold mb-1">{item.name}</h4>
+                              <p className="text-sm text-gold/80">
                                 כמות: {item.quantity} | מחיר ליחידה: ₪{item.price.toFixed(2)}
                               </p>
                             </div>
                             <div className="text-right">
-                              <p className="font-bold text-gray-900">
+                              <p className="font-bold text-gold">
                                 ₪{(item.price * item.quantity).toFixed(2)}
                               </p>
                             </div>
@@ -307,9 +316,9 @@ function MyOrdersPage() {
 
                     {/* Notes */}
                     {order.notes && (
-                      <div className="mt-6 pt-6 border-t border-gray-200">
-                        <h3 className="text-lg font-semibold text-gray-900 mb-2">הערות</h3>
-                        <p className="text-gray-700">{order.notes}</p>
+                      <div className="mt-6 pt-6 border-t border-gold/30">
+                        <h3 className="text-lg font-semibold text-gold mb-2" style={{ fontFamily: 'serif' }}>הערות</h3>
+                        <p className="text-gold/90">{order.notes}</p>
                       </div>
                     )}
                   </div>

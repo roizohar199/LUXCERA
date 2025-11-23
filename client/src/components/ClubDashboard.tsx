@@ -172,11 +172,6 @@ const ClubDashboard: React.FC<Props> = ({ userEmail }) => {
               <span><strong>מ-₪500 ומעלה:</strong> ניתן לממש עד 300 נקודות</span>
             </li>
           </ul>
-          <p className="text-sm text-blue-700 mt-3 pt-3 border-t border-blue-200">
-            💡 <strong>שימו לב:</strong> הסכום מחושב לפני מימוש הנקודות (אחרי הנחות Gift Card וקופונים). 
-            <br />
-            <strong>מימוש הנקודות מתבצע בעת ביצוע הזמנה בדף התשלום המאובטח בלבד</strong> - שם תוכלו לממש את הנקודות ולקבל הנחה על ההזמנה.
-          </p>
         </div>
 
         {/* הודעה על מימוש נקודות */}
@@ -204,11 +199,28 @@ const ClubDashboard: React.FC<Props> = ({ userEmail }) => {
                   <th className="text-right py-3 text-gold font-semibold">תאריך</th>
                   <th className="text-right py-3 text-gold font-semibold">סוג</th>
                   <th className="text-right py-3 text-gold font-semibold">נקודות</th>
+                  <th className="text-right py-3 text-gold font-semibold">יתרה</th>
                   <th className="text-right py-3 text-gold font-semibold">תיאור</th>
                 </tr>
               </thead>
               <tbody>
-                {transactions.map((tx) => (
+                {(() => {
+                  // מחשב את היתרה לאחר כל תנועה
+                  // התנועות מסודרות מהחדש לישן (DESC), אז נחשב מההתחלה (הישן ביותר)
+                  const reversedTransactions = [...transactions].reverse();
+                  let runningBalance = 0;
+                  const transactionsWithBalance = reversedTransactions.map((tx) => {
+                    // מעדכן את היתרה לפי סוג התנועה
+                    if (tx.type === 'EARN') {
+                      runningBalance += tx.points;
+                    } else {
+                      runningBalance -= tx.points;
+                    }
+                    return { ...tx, balance: runningBalance };
+                  });
+                  // מחזירים לסדר המקורי (מהחדש לישן)
+                  return transactionsWithBalance.reverse();
+                })().map((tx: LoyaltyTransaction & { balance: number }) => (
                   <tr key={tx.id} className="border-b border-gold/10 hover:bg-gold/5">
                     <td className="py-3 text-gray-700">
                       {new Date(tx.created_at).toLocaleString('he-IL')}
@@ -224,7 +236,12 @@ const ClubDashboard: React.FC<Props> = ({ userEmail }) => {
                         {tx.type === 'EARN' ? 'צבירה' : 'מימוש'}
                       </span>
                     </td>
-                    <td className="py-3 text-gray-700 font-semibold">{tx.points}</td>
+                    <td className="py-3 text-gray-700 font-semibold">
+                      {tx.type === 'EARN' ? '+' : '-'}{tx.points}
+                    </td>
+                    <td className="py-3 text-gray-900 font-bold">
+                      {tx.balance.toLocaleString('he-IL')}
+                    </td>
                     <td className="py-3 text-gray-600">{tx.description}</td>
                   </tr>
                 ))}
